@@ -74,6 +74,10 @@ Blueprint 模块化路由,每个文件对应一个功能模块:
   - 多 API 回退策略
 - `gptmail.py` - GPTMail API 封装
 - `http.py` - HTTP 客户端封装 (支持代理)
+- `verification_extractor.py` - 验证码提取服务
+  - 验证码/链接自动提取
+  - Graph API → IMAP 回退策略
+  - 正则表达式匹配
 
 #### repositories/ 数据访问层
 数据库 CRUD 操作封装:
