@@ -1,5 +1,45 @@
 # DEVLOG（发布记录）
 
+## v1.2.0（2026-03-01）
+
+### 新增功能
+- **UI 全局美化重设计**：从白底黑字四栏布局全面升级为现代国风设计系统（砖红 #B85C38 + 翠绿 #3A7D44 + 琥珀金 #C8963E），支持浅色/深色主题切换
+- **侧边栏导航系统**：全新侧边栏支持折叠/展开，包含仪表盘、邮箱管理、临时邮箱、审计日志、刷新日志、系统设置等导航项
+- **设置页面内嵌显示**：系统设置从弹窗模式改为页面内嵌直接渲染，无需额外点击
+- **审计日志 & 刷新日志页面**：新增独立页面加载函数，进入即自动拉取数据
+- **临时邮箱增强**：卡片新增验证码提取按钮、邮箱地址点击复制、顶栏邮箱名称可复制
+- **账号头像多彩系统**：8 组渐变色按索引分配，告别单调统一颜色
+- **GitHub 仓库链接**：侧边栏底部新增 GitHub 仓库快速入口
+- **代码质量工具链**：新增 `pyproject.toml` 统一 black/isort 配置（line-length=127）
+
+### 修复
+- **BUG-002** 选中账号名称未在邮件栏顶部显示（`currentAccountBar` 显示逻辑修正）
+- **BUG-012** 侧边栏折叠后导航图标消失（CSS 选择器排除 `.nav-icon`）
+- **BUG-013** 邮箱管理页仍显示"临时邮箱"分组（`renderGroupList` 过滤）
+- **BUG-014/015** 审计日志和刷新日志页面永远 loading（新增加载函数 + navigate 调用）
+- **BUG-016** 设置页面从弹窗改为内嵌显示
+- **BUG-018** 导入账号弹窗 textarea 尺寸优化
+- **BUG-020** 临时邮箱顶栏邮箱名称不可复制
+- **BUG-021** 进入邮箱管理不自动选中默认分组
+- **BUG-022** 切换分组时 currentAccountBar 不重置
+- **BUG-023** 收件箱/垃圾邮件 Tab 切换 active 状态不更新（`.folder-tab` → `.email-tab`）
+- **BUG-024** 从临时邮箱返回邮箱管理后账号列数据残留
+- **Docker CI** secrets 检测从 job-level if 改为独立 check-secrets job，修复云端构建始终跳过的问题
+- **安全修复**：移除误提交的包含密钥的 `start_temp.bat`
+
+### 重要变更
+- **CI/CD 全面升级**：所有 workflow 的 `actions/checkout` 从 v4 升级至 v6
+- **代码格式化**：30+ 文件 isort 导入排序修复（`--profile black`），1 文件 black 格式化
+- **Dependabot 移除**：不再自动创建依赖更新 PR
+- **Docker 镜像**：成功推送至 `guangshanshui/outlook-email-plus`（支持 linux/amd64 + linux/arm64）
+- 新增 19 个 UI 重设计 BUG 回归测试（`test_ui_redesign_bugs.py`）
+
+### 测试/验证
+- `python -m pytest tests/ --tb=short -q`：114 个测试全部通过
+- `docker build .`：本地 Docker 构建通过
+- GitHub Actions：Python Tests ✅ / Code Quality ✅ / Docker Build Push ✅
+- 本地服务器启动验证：`/healthz` 返回 `{"status":"ok"}`
+
 ## v1.1.1（2026-02-28）
 
 ### 新增功能
