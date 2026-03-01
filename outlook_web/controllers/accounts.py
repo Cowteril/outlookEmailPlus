@@ -15,14 +15,14 @@ from outlook_web.db import get_db
 from outlook_web.errors import build_error_payload
 from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import groups as groups_repo
-from outlook_web.repositories import tags as tags_repo
 from outlook_web.repositories import refresh_logs as refresh_logs_repo
 from outlook_web.repositories import settings as settings_repo
-from outlook_web.repositories.refresh_runs import create_refresh_run, finish_refresh_run
+from outlook_web.repositories import tags as tags_repo
 from outlook_web.repositories.distributed_locks import (
     acquire_distributed_lock,
     release_distributed_lock,
 )
+from outlook_web.repositories.refresh_runs import create_refresh_run, finish_refresh_run
 from outlook_web.security.auth import get_client_ip, get_user_agent, login_required
 from outlook_web.security.crypto import decrypt_data
 from outlook_web.services import graph as graph_service
@@ -835,12 +835,12 @@ def api_export_selected_accounts() -> Any:
 @login_required
 def api_generate_export_verify_token() -> Any:
     """生成导出验证token（二次验证）"""
+    from outlook_web.repositories import settings as settings_repo
     from outlook_web.security.auth import (
-        issue_export_verify_token,
         get_client_ip,
         get_user_agent,
+        issue_export_verify_token,
     )
-    from outlook_web.repositories import settings as settings_repo
     from outlook_web.security.crypto import verify_password
 
     data = request.json

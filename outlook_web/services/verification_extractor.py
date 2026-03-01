@@ -13,8 +13,7 @@ from __future__ import annotations
 import html
 import re
 from html.parser import HTMLParser
-from typing import List, Optional, Dict, Any
-
+from typing import Any, Dict, List, Optional
 
 # 验证码关键词列表（支持中英文）
 VERIFICATION_KEYWORDS = [

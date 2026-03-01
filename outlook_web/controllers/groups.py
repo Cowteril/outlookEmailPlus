@@ -8,6 +8,7 @@ from urllib.parse import quote
 
 from flask import Response, jsonify, request
 
+from outlook_web.audit import log_audit
 from outlook_web.errors import build_error_payload
 from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import groups as groups_repo
@@ -18,7 +19,6 @@ from outlook_web.security.auth import (
     get_user_agent,
     login_required,
 )
-from outlook_web.audit import log_audit
 
 
 def sanitize_input(text: str, max_length: int = 500) -> str:

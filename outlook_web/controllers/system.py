@@ -17,7 +17,6 @@ from outlook_web.db import (
 from outlook_web.repositories import settings as settings_repo
 from outlook_web.security.auth import login_required
 
-
 # 常量
 REFRESH_LOCK_NAME = "token_refresh"
 

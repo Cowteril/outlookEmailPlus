@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from outlook_web.errors import build_error_payload
-from outlook_web.services.http import get_response_details
 from outlook_web.services.graph import get_access_token_graph
+from outlook_web.services.http import get_response_details
 
 # Token 端点
 TOKEN_URL_IMAP = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"

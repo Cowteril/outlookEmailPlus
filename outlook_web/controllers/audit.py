@@ -7,7 +7,6 @@ from flask import jsonify, request
 from outlook_web.audit import query_audit_logs
 from outlook_web.security.auth import login_required
 
-
 # ==================== 审计日志 API ====================
 
 

@@ -11,7 +11,7 @@ Outlook 邮件读取测试工具
 import email
 import imaplib
 from email.header import decode_header
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import requests
 

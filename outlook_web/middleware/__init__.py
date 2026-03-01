@@ -1,11 +1,11 @@
 # Middleware module
-from outlook_web.middleware.trace import (
-    ensure_trace_id,
-    attach_trace_id_and_normalize_errors,
-)
 from outlook_web.middleware.error_handler import (
-    handle_http_exception,
     handle_exception,
+    handle_http_exception,
+)
+from outlook_web.middleware.trace import (
+    attach_trace_id_and_normalize_errors,
+    ensure_trace_id,
 )
 
 __all__ = [

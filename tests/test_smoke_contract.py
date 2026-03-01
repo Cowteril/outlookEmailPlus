@@ -1,6 +1,6 @@
 import unittest
 
-from tests._import_app import import_web_app_module, clear_login_attempts
+from tests._import_app import clear_login_attempts, import_web_app_module
 
 
 class SmokeContractTests(unittest.TestCase):

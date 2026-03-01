@@ -15,7 +15,6 @@ from outlook_web.services import email_delete as email_delete_service
 from outlook_web.services import graph as graph_service
 from outlook_web.services import imap as imap_service
 
-
 # IMAP 服务器配置
 IMAP_SERVER_OLD = "outlook.office365.com"
 IMAP_SERVER_NEW = "outlook.live.com"

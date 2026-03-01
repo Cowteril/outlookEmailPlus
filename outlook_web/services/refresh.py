@@ -8,13 +8,12 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from outlook_web.db import create_sqlite_connection
 from outlook_web.errors import build_error_payload, generate_trace_id
-from outlook_web.security.crypto import decrypt_data
 from outlook_web.repositories.distributed_locks import (
     acquire_distributed_lock,
     release_distributed_lock,
 )
 from outlook_web.repositories.refresh_runs import create_refresh_run, finish_refresh_run
-
+from outlook_web.security.crypto import decrypt_data
 
 REFRESH_LOCK_TTL_SECONDS = 60 * 60 * 2  # 2 小时，避免异常中断导致长时间卡死
 

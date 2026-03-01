@@ -11,7 +11,6 @@ from outlook_web.repositories import settings as settings_repo
 from outlook_web.security.auth import login_required
 from outlook_web.security.crypto import hash_password
 
-
 # ==================== 设置 API ====================
 
 
@@ -64,9 +63,10 @@ def api_get_settings() -> Any:
 def api_update_settings() -> Any:
     """更新设置"""
     # 延迟导入避免循环依赖
-    from outlook_web.services import scheduler as scheduler_service
-    from outlook_web.services import graph as graph_service
     from flask import current_app
+
+    from outlook_web.services import graph as graph_service
+    from outlook_web.services import scheduler as scheduler_service
 
     data = request.json
     updated = []

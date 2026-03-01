@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Tuple
 
-
 try:
-    from flask_wtf.csrf import CSRFProtect, generate_csrf as _generate_csrf  # type: ignore
+    from flask_wtf.csrf import CSRFProtect
+    from flask_wtf.csrf import generate_csrf as _generate_csrf  # type: ignore
 
     CSRF_AVAILABLE = True
 except ImportError:  # pragma: no cover

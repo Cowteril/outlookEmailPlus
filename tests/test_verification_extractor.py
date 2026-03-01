@@ -8,20 +8,20 @@
 - 边界情况处理
 """
 
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from outlook_web.services.verification_extractor import (
-    smart_extract_verification_code,
-    fallback_extract_verification_code,
-    extract_links,
     extract_email_text,
+    extract_links,
     extract_verification_info,
     extract_verification_info_from_text,
+    fallback_extract_verification_code,
+    smart_extract_verification_code,
 )
 
 

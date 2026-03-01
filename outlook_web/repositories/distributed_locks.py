@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
 import time
 from typing import Any, Dict, Optional
-
-import sqlite3
 
 
 def acquire_distributed_lock(

@@ -14,7 +14,6 @@ from outlook_web.security.auth import (
     login_required,
 )
 
-
 # OAuth 配置
 OAUTH_SCOPES = [
     "offline_access",

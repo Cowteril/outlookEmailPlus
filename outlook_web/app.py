@@ -18,17 +18,16 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         from pathlib import Path
 
         from flask import Flask
-        from werkzeug.middleware.proxy_fix import ProxyFix
         from werkzeug.exceptions import HTTPException
+        from werkzeug.middleware.proxy_fix import ProxyFix
 
         from outlook_web import config
-        from outlook_web.db import register_db, init_db
-        from outlook_web.security.csrf import init_csrf
+        from outlook_web.db import init_db, register_db
         from outlook_web.middleware import (
-            ensure_trace_id,
             attach_trace_id_and_normalize_errors,
-            handle_http_exception,
+            ensure_trace_id,
             handle_exception,
+            handle_http_exception,
         )
         from outlook_web.routes import (
             accounts,
@@ -43,6 +42,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
             tags,
             temp_emails,
         )
+        from outlook_web.security.csrf import init_csrf
 
         # 初始化（DB/目录等）
         repo_root = Path(__file__).resolve().parents[1]
@@ -128,16 +128,16 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
 
     # 调度器启动控制
     if autostart_scheduler is None:
-        from outlook_web.services import scheduler as scheduler_service
         from outlook_web.services import graph as graph_service
+        from outlook_web.services import scheduler as scheduler_service
 
         if scheduler_service.should_autostart_scheduler():
             scheduler_service.init_scheduler(
                 _APP_INSTANCE, graph_service.test_refresh_token
             )
     elif autostart_scheduler:
-        from outlook_web.services import scheduler as scheduler_service
         from outlook_web.services import graph as graph_service
+        from outlook_web.services import scheduler as scheduler_service
 
         scheduler_service.init_scheduler(
             _APP_INSTANCE, graph_service.test_refresh_token
