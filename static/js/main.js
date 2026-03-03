@@ -915,18 +915,20 @@ ${details}
                 const data = await response.json();
 
                 if (data.success) {
-                    // 生成完整的导入格式
-                    const importFormat = `your@outlook.com----yourpassword----${data.client_id}----${data.refresh_token}`;
-
-                    // 显示结果
-                    document.getElementById('refreshTokenOutput').value = importFormat;
-                    document.getElementById('refreshTokenResult').style.display = 'block';
-
-                    showToast('✅ Refresh Token 获取成功！', 'success');
-
-                    // 重置按钮状态（不隐藏，允许重复使用）
                     btn.disabled = false;
                     btn.textContent = '换取 Token';
+
+                    // 关闭 Token 弹窗，打开添加账号弹窗并预填充
+                    hideGetRefreshTokenModal();
+                    showAddAccountModal();
+
+                    const inputEl = document.getElementById('accountInput');
+                    if (inputEl) {
+                        inputEl.value = `your@outlook.com----yourpassword----${data.client_id}----${data.refresh_token}`;
+                        inputEl.select();
+                    }
+
+                    showToast('✅ Token 获取成功！请将邮箱和密码替换后点导入', 'success');
                 } else {
                     handleApiError(data, '换取 Token 失败');
                     btn.disabled = false;

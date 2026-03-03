@@ -129,6 +129,12 @@
                 }
             }
 
+            // 显示「注册Outlook账号」按钮（仅在非临时邮箱分组时）
+            const registerBtn = document.getElementById('registerOutlookBtn');
+            if (registerBtn) {
+                registerBtn.style.display = isTempEmailGroup ? 'none' : '';
+            }
+
             // 更新底部按钮
             updateAccountPanelFooter();
 
@@ -173,6 +179,22 @@
             }
         }
 
+        // 获取 provider 的中文展示名（账号卡片 tag）
+        function getProviderLabel(provider) {
+            const key = (provider || 'outlook').toString().toLowerCase();
+            const labels = {
+                outlook: 'Outlook',
+                gmail: 'Gmail',
+                qq: 'QQ邮箱',
+                '163': '163邮箱',
+                '126': '126邮箱',
+                yahoo: 'Yahoo邮箱',
+                aliyun: '阿里邮箱',
+                custom: '自定义IMAP'
+            };
+            return labels[key] || provider || '未知';
+        }
+
         // 渲染邮箱列表
         function renderAccountList(accounts) {
             const container = document.getElementById('accountList');
@@ -210,6 +232,8 @@
                 const initial = (acc.email || '?')[0].toUpperCase();
                 const isFailed = acc.last_refresh_status === 'failed';
                 const gradient = avatarGradients[index % avatarGradients.length];
+                const providerLabel = getProviderLabel(acc.provider || acc.account_type || 'outlook');
+                const providerTagHtml = `<span class="account-provider-tag">${escapeHtml(providerLabel)}</span>`;
 
                 let tokenBadge = '<span class="badge badge-gray">– 未知</span>';
                 if (acc.token_status === 'valid') {
@@ -235,6 +259,7 @@
                             </div>
                             ${acc.remark && acc.remark.trim() ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">📝 ${escapeHtml(acc.remark)}</div>` : ''}
                             <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">
+                                ${providerTagHtml}
                                 ${(acc.tags || []).map(tag => `<span class="tag" style="background-color:${tag.color};color:white;">${escapeHtml(tag.name)}</span>`).join('')}
                             </div>
                         </div>
