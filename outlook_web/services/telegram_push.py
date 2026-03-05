@@ -87,6 +87,8 @@ def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
             },
             timeout=10,
         )
+        if not resp.ok:
+            logger.warning("[telegram_push] send HTTP %s: %s", resp.status_code, resp.text[:200])
         return resp.ok
     except Exception as e:
         logger.warning("[telegram_push] send failed: %s", e)
@@ -309,18 +311,24 @@ def run_telegram_push_job(app) -> None:
                 else:
                     emails = _fetch_new_emails_imap(account, last_checked)
 
+                logger.info(
+                    "[telegram_push] account=%s provider=%s since=%s found=%d",
+                    account.get("email"), account.get("provider"), last_checked, len(emails),
+                )
+
                 for em in sorted(emails, key=lambda e: e.get("received_at", "")):
                     if sent_count >= MAX_SENT_PER_JOB:
                         break
                     msg = _build_telegram_message(account["email"], em)
-                    _send_telegram_message(bot_token, chat_id, msg)
-                    sent_count += 1
+                    if _send_telegram_message(bot_token, chat_id, msg):
+                        sent_count += 1
+
+                # 仅在 fetch 成功时推进游标（失败时保留旧游标，避免漏推）
+                update_telegram_cursor(account["id"], job_start_time)
 
             except Exception as e:
                 logger.warning("[telegram_push] account=%s error: %s", account.get("email"), e)
-
-            finally:
-                update_telegram_cursor(account["id"], job_start_time)
+                # 不推进游标——下次重试时会重新拉取
 
     elapsed = time.monotonic() - t0
     logger.info("[telegram_push] job finished: sent=%d elapsed=%.1fs", sent_count, elapsed)

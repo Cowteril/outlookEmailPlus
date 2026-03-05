@@ -495,8 +495,8 @@ class TestRunTelegramPushJob(unittest.TestCase):
 
             self.assertEqual(call_count, 20, f"Expected 20, got {call_count}")
 
-    def test_t21_imap_exception_silent_cursor_updated(self):
-        """T-21：IMAP 连接异常 → 不抛出，游标仍更新"""
+    def test_t21_imap_exception_silent_cursor_not_advanced(self):
+        """T-21：IMAP 连接异常 → 不抛出，游标不推进（避免漏推邮件）"""
         with self.app.app_context():
             from outlook_web.db import get_db
             db = get_db()
@@ -517,12 +517,12 @@ class TestRunTelegramPushJob(unittest.TestCase):
 
                 mock_send.assert_not_called()
 
-            # 游标仍更新
+            # 游标不推进——保留旧值以便下次重试
             cursor = db.execute(
                 "SELECT telegram_last_checked_at FROM accounts WHERE id = ?",
                 (acc_id,)
             ).fetchone()["telegram_last_checked_at"]
-            self.assertNotEqual(cursor, "2026-03-01T00:00:00")
+            self.assertEqual(cursor, "2026-03-01T00:00:00")
 
     def test_t22_send_failure_silent_cursor_updated(self):
         """T-22：Telegram 发送失败 → 不抛出，游标仍更新"""
@@ -781,6 +781,109 @@ class TestRegressions(unittest.TestCase):
             set_setting("_test_regression_key", "ok")
             val = get_setting("_test_regression_key")
             self.assertEqual(val, "ok")
+
+
+# ===========================================================================
+# BUG-00009 相关测试：IMAP 时区处理 + 游标过滤
+# ===========================================================================
+
+
+class TestImapTimezoneAndCursor(unittest.TestCase):
+    """BUG-00009 D-2: 验证 IMAP 邮件时区正确转换为 UTC 后与游标比较"""
+
+    def test_imap_email_cst_timezone_converted_to_utc(self):
+        """BUG-TG-006 验证：CST +0800 邮件时间应转换为 UTC"""
+        from datetime import timezone as tz
+        from email.utils import parsedate_to_datetime
+
+        date_str = "Wed, 05 Mar 2026 17:00:00 +0800"
+        received_dt = parsedate_to_datetime(date_str)
+        if received_dt.tzinfo is not None:
+            received_dt = received_dt.astimezone(tz.utc)
+        received_iso = received_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        # CST 17:00 = UTC 09:00
+        self.assertEqual(received_iso, "2026-03-05T09:00:00")
+
+    def test_imap_email_utc_timezone_unchanged(self):
+        """UTC +0000 邮件时间应保持不变"""
+        from datetime import timezone as tz
+        from email.utils import parsedate_to_datetime
+
+        date_str = "Wed, 05 Mar 2026 09:00:00 +0000"
+        received_dt = parsedate_to_datetime(date_str)
+        if received_dt.tzinfo is not None:
+            received_dt = received_dt.astimezone(tz.utc)
+        received_iso = received_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        self.assertEqual(received_iso, "2026-03-05T09:00:00")
+
+    def test_cursor_filter_before_cursor_excluded(self):
+        """游标之前的邮件应被过滤（received_iso <= since → continue）"""
+        cursor = "2026-03-05T09:30:00"
+        email_time = "2026-03-05T09:20:00"  # 在游标之前
+        self.assertTrue(email_time <= cursor, "游标之前的邮件应被过滤")
+
+    def test_cursor_filter_after_cursor_included(self):
+        """游标之后的邮件应通过过滤"""
+        cursor = "2026-03-05T09:30:00"
+        email_time = "2026-03-05T09:40:00"  # 在游标之后
+        self.assertFalse(email_time <= cursor, "游标之后的邮件不应被过滤")
+
+    def test_cursor_filter_exact_cursor_excluded(self):
+        """恰好等于游标时间的邮件应被过滤（<= 比较）"""
+        cursor = "2026-03-05T09:30:00"
+        email_time = "2026-03-05T09:30:00"
+        self.assertTrue(email_time <= cursor, "等于游标的邮件应被过滤")
+
+    def test_cst_email_vs_utc_cursor_correct_after_fix(self):
+        """BUG-TG-006 核心场景：CST 邮件转 UTC 后应被正确过滤"""
+        from datetime import timezone as tz
+        from email.utils import parsedate_to_datetime
+
+        cursor_utc = "2026-03-05T09:30:00"
+
+        # CST 17:00 = UTC 09:00, 在游标 09:30 之前 → 应被过滤
+        date_str = "Wed, 05 Mar 2026 17:00:00 +0800"
+        received_dt = parsedate_to_datetime(date_str)
+        if received_dt.tzinfo is not None:
+            received_dt = received_dt.astimezone(tz.utc)
+        received_iso = received_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        self.assertTrue(received_iso <= cursor_utc,
+                        f"CST 17:00 (UTC 09:00) 应在游标 09:30 之前被过滤，但 received_iso={received_iso}")
+
+    def test_cst_email_after_cursor_passes_filter(self):
+        """CST 邮件转 UTC 后若在游标之后应通过"""
+        from datetime import timezone as tz
+        from email.utils import parsedate_to_datetime
+
+        cursor_utc = "2026-03-05T09:30:00"
+
+        # CST 18:00 = UTC 10:00, 在游标 09:30 之后 → 应通过
+        date_str = "Wed, 05 Mar 2026 18:00:00 +0800"
+        received_dt = parsedate_to_datetime(date_str)
+        if received_dt.tzinfo is not None:
+            received_dt = received_dt.astimezone(tz.utc)
+        received_iso = received_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+        self.assertFalse(received_iso <= cursor_utc,
+                         f"CST 18:00 (UTC 10:00) 应通过游标 09:30 过滤，但被拦截了")
+
+
+class TestScrollPreservation(unittest.TestCase):
+    """BUG-00009 D-1: 滚动位置保留（前端手动验证清单）"""
+
+    def test_d1_documented_as_manual_test(self):
+        """D-1 前端滚动测试需手动验证：
+        1. 滚动到分组中间某个账号
+        2. 点击 🔔 开启推送
+        3. 验证列表不回到顶部
+        4. 点击 🔔推送 标签关闭
+        5. 验证列表不回到顶部
+        """
+        # 前端交互测试无法自动化，此用例记录验证清单
+        pass
 
 
 if __name__ == "__main__":

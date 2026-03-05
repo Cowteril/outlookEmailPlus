@@ -157,6 +157,9 @@
         async function loadAccountsByGroup(groupId, forceRefresh = false) {
             const container = document.getElementById('accountList');
 
+            // 保存当前滚动位置（forceRefresh 时恢复）
+            const savedScrollTop = forceRefresh ? container.scrollTop : 0;
+
             // 如果有缓存且不强制刷新，直接使用缓存
             if (!forceRefresh && accountsCache[groupId]) {
                 renderAccountList(accountsCache[groupId]);
@@ -173,6 +176,10 @@
                     // 缓存数据
                     accountsCache[groupId] = data.accounts;
                     renderAccountList(data.accounts);
+                    // 恢复滚动位置
+                    if (forceRefresh) {
+                        container.scrollTop = savedScrollTop;
+                    }
                 }
             } catch (error) {
                 container.innerHTML = '<div class="empty-state"><p>加载失败</p></div>';
