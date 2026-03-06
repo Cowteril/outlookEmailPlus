@@ -1077,15 +1077,15 @@ class TestParallelJobBehavior(unittest.TestCase):
                 self.assertIn(f"p{i}@parallel.com", fetch_emails,
                               f"p{i}@parallel.com 未被 fetch")
 
-    def test_scheduler_default_interval_is_60(self):
-        """调度器默认间隔应为 60 秒"""
+    def test_scheduler_default_interval_is_600(self):
+        """调度器默认间隔应为 600 秒"""
         with self.app.app_context():
             from outlook_web.services.scheduler import _get_telegram_interval
             # 清除可能存在的设置
             from outlook_web.repositories.settings import set_setting
             set_setting("telegram_poll_interval", "")
             interval = _get_telegram_interval(self.app)
-            self.assertEqual(interval, 60)
+            self.assertEqual(interval, 600)
 
     def test_recency_filter_skips_old_emails(self):
         """PUSH_RECENCY_HOURS: 超过 12 小时的邮件应被跳过"""

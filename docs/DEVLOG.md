@@ -1,5 +1,36 @@
 # DEVLOG（发布记录）
 
+## v1.5.0（2026-03-06）
+
+### 新增功能
+- **Telegram 实时推送（TODO-00007 / FD-00007 / TDD-00007）**：后台定时轮询 Graph/IMAP 拉取新邮件并推送到 Telegram（不落库邮件内容）
+  - **全局配置**：新增 Bot Token（加密存储 + 脱敏回显）、Chat ID、轮询间隔（秒）
+  - **账号级开关**：账号列表新增推送开关；首次启用会初始化游标为当前时间，避免历史邮件“轰炸式”推送
+  - **推送策略**：单次任务全局最多发送 20 条、每账号最多拉取 50 封；消息间延迟发送防限流；仅推送最近 12 小时内的新邮件
+  - **并行抓取**：多账号并行拉取新邮件，提高轮询效率
+- **Message-ID 去重（BUG-00011 P2）**：新增 `telegram_push_log` 去重记录（按账号 + Message-ID），默认保留 7 天，防止重复推送
+
+### 修复
+- **修复调度器重载上下文问题**：保存 Telegram 轮询间隔后支持重调度，避免 `current_app(LocalProxy)` 被后台 Job 持有导致 “Working outside of application context”
+- **修复游标竞态导致重复推送（BUG-00011）**：抓取失败不推进游标；新游标取 `max(job_start_time, max(received_at))`，减少边界重复
+- **修复时区不一致导致重复推送（BUG-TG-006）**：统一 UTC 时间比较逻辑
+- **修复 Graph API 代理/配置兼容性问题**：支持 proxy_url；优化 client_id 选择；前端空值保护
+- **补充依赖**：`requirements.txt` 增加 `python-dotenv`，保证 `start.py` 读取 `.env` 正常工作
+
+### 重要变更
+- **数据库 Schema 升级：v3 → v5**（启动自动迁移）
+  - `accounts` 表新增 `telegram_push_enabled`、`telegram_last_checked_at`
+  - 新增 `telegram_push_log` 表（唯一约束 + 索引）用于推送去重
+- **新增 API**
+  - `POST /api/accounts/<id>/telegram-toggle`：账号级推送开关
+  - `POST /api/settings/telegram-test`：发送 Telegram 测试消息验证配置
+- **新增/调整默认值**
+  - `telegram_poll_interval` 默认 600 秒；后端校验范围 10–86400 秒
+
+### 测试/验证
+- 单元测试：`python -m unittest discover -s tests -v`（229 tests，全部通过）
+- 手动验收：设置页保存 Telegram 配置与发送测试消息、账号级开关、首次启用不推送历史邮件、Message-ID 去重、代理场景推送
+
 ## v1.4.0（2026-03-04）
 
 ### 新增功能
