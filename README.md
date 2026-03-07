@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://hub.docker.com/r/guangshanshui/outlook-email-plus)
+[![GHCR](https://img.shields.io/badge/GHCR-ready-blue.svg)](https://github.com/ZeroPointSix/outlookEmailPlus/pkgs/container/outlook-email-plus)
 
 ## ✨ 核心特性
 
@@ -51,8 +52,12 @@
 ### 使用 Docker（推荐）
 
 ```bash
-# 拉取镜像
-docker pull guangshanshui/outlook-email-plus:latest
+# 拉取镜像（默认推荐 GHCR：由 GitHub Actions 自动发布）
+docker pull ghcr.io/<github_owner>/outlook-email-plus:latest
+# 例如：ghcr.io/zeropointsix/outlook-email-plus:latest
+
+# 或 Docker Hub（需要仓库配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN Secrets 才会自动发布）
+# docker pull guangshanshui/outlook-email-plus:latest
 
 # 运行容器
 docker run -d \
@@ -61,7 +66,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -e LOGIN_PASSWORD=admin123 \
   -e SECRET_KEY=your-secret-key-here \
-  guangshanshui/outlook-email-plus:latest
+  ghcr.io/<github_owner>/outlook-email-plus:latest
 
 # 访问应用
 # 浏览器打开 http://localhost:5000
@@ -74,7 +79,7 @@ version: '3.8'
 
 services:
   outlook-email-plus:
-    image: guangshanshui/outlook-email-plus:latest
+    image: ghcr.io/<github_owner>/outlook-email-plus:latest
     container_name: outlook-email-plus
     ports:
       - "5000:5000"
