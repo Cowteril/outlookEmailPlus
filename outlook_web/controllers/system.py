@@ -272,7 +272,23 @@ def api_external_health() -> Any:
             "server_time_utc": utcnow().isoformat() + "Z",
             "database": "ok" if db_ok else "error",
         }
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr="",
+            endpoint="/api/external/health",
+            status="ok",
+            details={"database": data["database"]},
+        )
         return jsonify(external_api_service.ok(data))
+    except Exception as exc:
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr="",
+            endpoint="/api/external/health",
+            status="error",
+            details={"code": "INTERNAL_ERROR", "err": type(exc).__name__},
+        )
+        return jsonify(external_api_service.fail("INTERNAL_ERROR", "服务内部错误")), 500
     finally:
         conn.close()
 
@@ -292,6 +308,13 @@ def api_external_capabilities() -> Any:
             "wait_message",
         ],
     }
+    external_api_service.audit_external_api_access(
+        action="external_api_access",
+        email_addr="",
+        endpoint="/api/external/capabilities",
+        status="ok",
+        details={"feature_count": len(data["features"])},
+    )
     return jsonify(external_api_service.ok(data))
 
 
@@ -300,10 +323,24 @@ def api_external_account_status() -> Any:
     """对外账号状态检查"""
     email_addr = (request.args.get("email") or "").strip()
     if not email_addr or "@" not in email_addr:
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr=email_addr,
+            endpoint="/api/external/account-status",
+            status="error",
+            details={"code": "INVALID_PARAM"},
+        )
         return jsonify(external_api_service.fail("INVALID_PARAM", "email 参数不合法")), 400
 
     account = accounts_repo.get_account_by_email(email_addr)
     if not account:
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr=email_addr,
+            endpoint="/api/external/account-status",
+            status="error",
+            details={"code": "ACCOUNT_NOT_FOUND"},
+        )
         return jsonify(external_api_service.fail("ACCOUNT_NOT_FOUND", "账号不存在", data={"email": email_addr})), 404
 
     account_type = (account.get("account_type") or "outlook").strip().lower()
@@ -317,18 +354,22 @@ def api_external_account_status() -> Any:
         else:
             can_read = bool((account.get("client_id") or "").strip()) and bool((account.get("refresh_token") or "").strip())
 
-    return jsonify(
-        external_api_service.ok(
-            {
-                "email": email_addr,
-                "exists": True,
-                "account_type": account_type,
-                "provider": provider,
-                "group_id": account.get("group_id"),
-                "status": account.get("status"),
-                "last_refresh_at": account.get("last_refresh_at"),
-                "preferred_method": preferred_method,
-                "can_read": can_read,
-            }
-        )
+    data = {
+        "email": email_addr,
+        "exists": True,
+        "account_type": account_type,
+        "provider": provider,
+        "group_id": account.get("group_id"),
+        "status": account.get("status"),
+        "last_refresh_at": account.get("last_refresh_at"),
+        "preferred_method": preferred_method,
+        "can_read": can_read,
+    }
+    external_api_service.audit_external_api_access(
+        action="external_api_access",
+        email_addr=email_addr,
+        endpoint="/api/external/account-status",
+        status="ok",
+        details={"preferred_method": preferred_method, "can_read": can_read},
     )
+    return jsonify(external_api_service.ok(data))

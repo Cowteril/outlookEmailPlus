@@ -183,6 +183,35 @@ def get_email_detail_graph(
         return None
 
 
+def get_email_raw_graph(
+    client_id: str,
+    refresh_token: str,
+    message_id: str,
+    proxy_url: str = None,
+) -> Optional[str]:
+    """使用 Graph API 获取邮件 MIME RAW 内容。"""
+    access_token = get_access_token_graph(client_id, refresh_token, proxy_url)
+    if not access_token:
+        return None
+
+    try:
+        url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}/$value"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+        }
+
+        proxies = build_proxies(proxy_url)
+        res = requests.get(url, headers=headers, timeout=30, proxies=proxies)
+
+        if res.status_code != 200:
+            return None
+
+        res.encoding = res.encoding or "utf-8"
+        return res.text
+    except Exception:
+        return None
+
+
 def test_refresh_token(client_id: str, refresh_token: str, proxy_url: str = None) -> tuple[bool, str | None]:
     """测试 refresh token 是否有效，返回 (是否成功, 错误信息)"""
     ok, err, _new_refresh_token = test_refresh_token_with_rotation(client_id, refresh_token, proxy_url)

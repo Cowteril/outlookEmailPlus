@@ -581,7 +581,7 @@ def api_extract_verification(email_addr: str) -> Any:
 # ==================== External Emails API ====================
 
 
-def _parse_external_common_args() -> dict:
+def _parse_external_common_args(*, default_since_minutes: int | None = None) -> dict:
     """解析 external API 通用 query 参数（按 TDD-00008 做基础校验）。"""
     email_addr = (request.args.get("email") or "").strip()
     if not email_addr or "@" not in email_addr:
@@ -608,7 +608,7 @@ def _parse_external_common_args() -> dict:
         raise external_api_service.InvalidParamError("top 参数无效")
 
     since_minutes_raw = request.args.get("since_minutes", None)
-    since_minutes = None
+    since_minutes = default_since_minutes
     if since_minutes_raw not in (None, ""):
         try:
             since_minutes = int(since_minutes_raw)
@@ -763,6 +763,13 @@ def api_external_get_message_raw(message_id: str) -> Any:
             message_id=message_id,
             folder=args["folder"],
         )
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr=args["email"] or "",
+            endpoint="/api/external/messages/{message_id}/raw",
+            status="ok",
+            details={"method": detail.get("method")},
+        )
         return jsonify(
             external_api_service.ok(
                 {
@@ -774,15 +781,29 @@ def api_external_get_message_raw(message_id: str) -> Any:
             )
         )
     except external_api_service.ExternalApiError as exc:
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr=(request.args.get("email") or "").strip(),
+            endpoint="/api/external/messages/{message_id}/raw",
+            status="error",
+            details={"code": exc.code},
+        )
         return _external_error_response(exc)
-    except Exception:
+    except Exception as exc:
+        external_api_service.audit_external_api_access(
+            action="external_api_access",
+            email_addr=(request.args.get("email") or "").strip(),
+            endpoint="/api/external/messages/{message_id}/raw",
+            status="error",
+            details={"code": "INTERNAL_ERROR", "err": type(exc).__name__},
+        )
         return jsonify(external_api_service.fail("INTERNAL_ERROR", "服务内部错误")), 500
 
 
 @api_key_required
 def api_external_get_verification_code() -> Any:
     try:
-        args = _parse_external_common_args()
+        args = _parse_external_common_args(default_since_minutes=10)
         code_length = (request.args.get("code_length") or "").strip() or None
         code_regex = (request.args.get("code_regex") or "").strip() or None
         code_source = (request.args.get("code_source") or "all").strip().lower()
@@ -828,7 +849,7 @@ def api_external_get_verification_code() -> Any:
 @api_key_required
 def api_external_get_verification_link() -> Any:
     try:
-        args = _parse_external_common_args()
+        args = _parse_external_common_args(default_since_minutes=10)
         result = external_api_service.get_verification_result(
             email_addr=args["email"],
             folder=args["folder"],

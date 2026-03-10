@@ -764,3 +764,23 @@ curl -H "X-API-Key: your-api-key" "http://localhost:5000/api/external/verificati
 3. 鉴权与配置链路闭环
 4. 核心错误码与 OpenAPI 一致
 5. 手动联调可完成“配置 → 健康检查 → 查邮件 → 取验证码/链接”全流程
+
+---
+
+## 15. 2026-03-10 增补回归重点
+
+本轮修复后，PRD-00008 相关回归必须额外覆盖以下场景：
+
+1. `verification-code` / `verification-link` 在未传 `since_minutes` 时，默认仅扫描最近 `10` 分钟邮件。
+2. `wait-message` 只能返回调用开始后到达的新邮件，历史旧邮件不能立即命中。
+3. Graph 成功链路下，`/api/external/messages/{message_id}` 与 `/raw` 返回的 `raw_content` 应优先为 MIME RAW，而不是正文字符串。
+4. `/api/external/messages/{message_id}/raw`、`/health`、`/capabilities`、`/account-status` 都必须写入 `audit_logs(resource_type='external_api')`。
+
+建议执行顺序：
+
+```bash
+python -m unittest tests.test_external_api -v
+python -m unittest tests.test_settings_external_api_key -v
+python -m unittest tests.test_verification_extractor_options -v
+python -m unittest discover -s tests -v
+```

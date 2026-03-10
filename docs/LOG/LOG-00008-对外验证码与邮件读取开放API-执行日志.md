@@ -118,3 +118,33 @@ python -m flask --app web_outlook_app run --host 127.0.0.1 --port 5055
 - 写入对外 API Key：`PUT /api/settings {"external_api_key":"abc123"}` → 200
 - 读取设置脱敏：`GET /api/settings` → `external_api_key_set=true` 且 `external_api_key_masked` 非明文
 - 外部健康检查：`GET /api/external/health`（Header `X-API-Key: abc123`）→ 200 `code=OK`
+
+## 执行记录（2026-03-10）
+
+### 8) 对齐 PRD 语义偏差并补强回归用例
+
+- 修复 `verification-code` / `verification-link`
+  - 未显式传入 `since_minutes` 时，默认按 PRD 使用最近 `10` 分钟窗口
+  - 避免命中过期历史验证码/历史验证链接
+- 修复 `wait-message`
+  - 由“存在匹配邮件即返回”改为“仅当调用开始后出现的新邮件才返回”
+  - 保留超时上限 `120` 秒与同步轮询实现
+- 修复 Graph 链路 RAW 内容
+  - 新增 Graph MIME 读取函数，优先使用 `/me/messages/{id}/$value`
+  - `messages/{id}` 与 `messages/{id}/raw` 在 Graph 成功时返回真实 MIME 内容，而非仅正文
+- 补齐审计日志闭环
+  - 新增 `/api/external/messages/{id}/raw`
+  - 新增 `/api/external/health`
+  - 新增 `/api/external/capabilities`
+  - 新增 `/api/external/account-status`
+- 补充回归测试
+  - `messages/latest` 筛选与最新命中
+  - `verification-*` 默认 10 分钟窗口
+  - `wait-message` 仅返回新邮件
+  - Graph RAW 内容与外部审计日志写入
+
+验证：
+- `python -m unittest tests.test_external_api -v` ✅
+- `python -m unittest tests.test_settings_external_api_key -v` ✅
+- `python -m unittest tests.test_verification_extractor_options -v` ✅
+- `python -m unittest discover -s tests -v` ✅（256 tests）

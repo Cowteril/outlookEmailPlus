@@ -384,6 +384,14 @@ def get_message_detail_for_external(
         proxy_url,
     )
     method_label = "Graph API"
+    graph_raw_content = None
+    if detail:
+        graph_raw_content = graph_service.get_email_raw_graph(
+            account.get("client_id") or "",
+            account.get("refresh_token") or "",
+            message_id,
+            proxy_url,
+        )
     if not detail:
         detail = imap_service.get_email_detail_imap_with_server(
             email_addr,
@@ -420,7 +428,7 @@ def get_message_detail_for_external(
 
         html_content = body_content if body_type == "html" else ""
         content = body_content if body_type == "text" else extract_email_text({"body_html": html_content})
-        raw_content = body_content
+        raw_content = str(graph_raw_content or body_content)
 
         from_address = (detail.get("from") or {}).get("emailAddress", {}).get("address", "")
         to_address = ",".join([r.get("emailAddress", {}).get("address", "") for r in (detail.get("toRecipients") or [])])
@@ -519,17 +527,20 @@ def wait_for_message(
     if poll_interval <= 0 or poll_interval > timeout_seconds:
         raise InvalidParamError("poll_interval 参数无效")
 
+    baseline_timestamp = int(time.time())
     start = time.time()
     last_error: Optional[ExternalApiError] = None
     while True:
         try:
-            return get_latest_message_for_external(
+            latest_message = get_latest_message_for_external(
                 email_addr=email_addr,
                 folder=folder,
                 from_contains=from_contains,
                 subject_contains=subject_contains,
                 since_minutes=since_minutes,
             )
+            if int(latest_message.get("timestamp") or 0) >= baseline_timestamp:
+                return latest_message
         except MailNotFoundError as exc:
             last_error = exc
 
