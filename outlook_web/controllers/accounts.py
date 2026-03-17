@@ -51,6 +51,17 @@ def sanitize_input(text: str, max_length: int = 500) -> str:
     return text
 
 
+def _parse_bool_flag(value: Any, default: bool = False) -> bool:
+    """解析请求中的布尔开关，兼容 bool / 数字 / 字符串。"""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 # ==================== 账号基础 CRUD API ====================
 
 
@@ -168,13 +179,14 @@ def api_add_account() -> Any:
     provider = (data.get("provider") or "outlook").strip().lower()
     custom_imap_host = (data.get("imap_host") or "").strip()
     custom_imap_port = data.get("imap_port")
+    add_to_pool = _parse_bool_flag(data.get("add_to_pool"), default=False)
 
     if not account_str:
         return jsonify({"success": False, "error": "请输入账号信息"})
 
     # FD-00006: auto 模式允许 group_id=null（自动分组），需在分组校验前分流
     if provider == "auto":
-        return _handle_auto_import(data)
+        return _handle_auto_import(data, add_to_pool=add_to_pool)
 
     # 校验分组
     target_group = groups_repo.get_group_by_id(group_id)
@@ -352,6 +364,7 @@ def api_add_account() -> Any:
                 imap_host=imap_host,
                 imap_port=imap_port,
                 imap_password=imap_pwd,
+                add_to_pool=add_to_pool,
                 db=db,
                 commit=False,
             )
@@ -455,6 +468,7 @@ def api_add_account() -> Any:
             client_id,
             refresh_token,
             group_id,
+            add_to_pool=add_to_pool,
             db=db,
             commit=False,
         )
@@ -743,7 +757,7 @@ def _handle_gptmail_import(
     return ok
 
 
-def _handle_auto_import(data: Dict[str, Any]) -> Any:
+def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> Any:
     """处理 provider="auto" 的智能混合导入。"""
     account_str = data.get("account_string", "")
     duplicate_strategy = (data.get("duplicate_strategy") or "skip").strip().lower()
@@ -883,6 +897,7 @@ def _handle_auto_import(data: Dict[str, Any]) -> Any:
                 group_id=group_id,
                 account_type="outlook",
                 provider="outlook",
+                add_to_pool=add_to_pool,
             )
         elif result["type"] == "imap":
             ok = accounts_repo.add_account(
@@ -896,6 +911,7 @@ def _handle_auto_import(data: Dict[str, Any]) -> Any:
                 imap_host=fields.get("imap_host", ""),
                 imap_port=fields.get("imap_port", 993),
                 imap_password=fields.get("imap_password", ""),
+                add_to_pool=add_to_pool,
             )
         else:
             ok = False

@@ -162,6 +162,7 @@ def add_account(
     imap_host: str = "",
     imap_port: int = 993,
     imap_password: str = "",
+    add_to_pool: bool = False,
     db: Optional[sqlite3.Connection] = None,
     commit: bool = True,
 ) -> bool:
@@ -186,15 +187,16 @@ def add_account(
         encrypted_password = encrypt_data(password) if password else password
         encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else refresh_token
         encrypted_imap_password = encrypt_data(imap_password) if imap_password else imap_password
+        initial_pool_status = "available" if add_to_pool else None
 
         db.execute(
             """
             INSERT INTO accounts (
                 email, password, client_id, refresh_token,
                 account_type, provider, imap_host, imap_port, imap_password,
-                group_id, remark
+                group_id, remark, pool_status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 email_addr,
@@ -208,6 +210,7 @@ def add_account(
                 encrypted_imap_password,
                 group_id,
                 remark,
+                initial_pool_status,
             ),
         )
         if commit:

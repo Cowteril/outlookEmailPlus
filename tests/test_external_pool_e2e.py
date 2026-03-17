@@ -32,12 +32,8 @@ class ExternalPoolE2ETests(unittest.TestCase):
             settings_repo.set_setting("external_api_ip_whitelist", "[]")
             settings_repo.set_setting("pool_external_enabled", "true")
             settings_repo.set_setting("external_api_disable_pool_claim_random", "false")
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_release", "false"
-            )
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_complete", "false"
-            )
+            settings_repo.set_setting("external_api_disable_pool_claim_release", "false")
+            settings_repo.set_setting("external_api_disable_pool_claim_complete", "false")
             settings_repo.set_setting("external_api_disable_pool_stats", "false")
 
     @staticmethod
@@ -46,9 +42,7 @@ class ExternalPoolE2ETests(unittest.TestCase):
 
     def _create_external_api_key(self, name: str, api_key: str, *, pool_access: bool):
         with self.app.app_context():
-            from outlook_web.repositories import (
-                external_api_keys as external_api_keys_repo,
-            )
+            from outlook_web.repositories import external_api_keys as external_api_keys_repo
 
             return external_api_keys_repo.create_external_api_key(
                 name=name,
@@ -84,9 +78,7 @@ class ExternalPoolE2ETests(unittest.TestCase):
                 ),
             )
             db.commit()
-            row = db.execute(
-                "SELECT id FROM accounts WHERE email = ?", (email_addr,)
-            ).fetchone()
+            row = db.execute("SELECT id FROM accounts WHERE email = ?", (email_addr,)).fetchone()
             return int(row["id"])
 
     def _external_audit_logs(self):
@@ -94,14 +86,12 @@ class ExternalPoolE2ETests(unittest.TestCase):
             from outlook_web.db import get_db
 
             db = get_db()
-            rows = db.execute(
-                """
+            rows = db.execute("""
                 SELECT action, resource_id, details
                 FROM audit_logs
                 WHERE resource_type = 'external_api'
                 ORDER BY id ASC
-                """
-            ).fetchall()
+                """).fetchall()
         return [dict(row) for row in rows]
 
     def _external_consumer_usage_rows(self):
@@ -109,13 +99,11 @@ class ExternalPoolE2ETests(unittest.TestCase):
             from outlook_web.db import get_db
 
             db = get_db()
-            rows = db.execute(
-                """
+            rows = db.execute("""
                 SELECT consumer_key, consumer_name, endpoint, total_count, success_count, error_count
                 FROM external_api_consumer_usage_daily
                 ORDER BY id ASC
-                """
-            ).fetchall()
+                """).fetchall()
         return [dict(row) for row in rows]
 
     def test_external_pool_e2e_claim_complete_records_audit_and_usage(self):
@@ -165,26 +153,18 @@ class ExternalPoolE2ETests(unittest.TestCase):
         self.assertIn("/api/external/pool/claim-random", endpoints)
         self.assertIn("/api/external/pool/claim-complete", endpoints)
         self.assertIn("/api/external/pool/stats", endpoints)
-        self.assertTrue(
-            all(item.get("consumer_name") == "partner-e2e" for item in parsed_details)
-        )
+        self.assertTrue(all(item.get("consumer_name") == "partner-e2e" for item in parsed_details))
 
         usage_rows = self._external_consumer_usage_rows()
         self.assertEqual(len(usage_rows), 3)
         by_endpoint = {row["endpoint"]: row for row in usage_rows}
-        self.assertEqual(
-            by_endpoint["/api/external/pool/claim-random"]["success_count"], 1
-        )
-        self.assertEqual(
-            by_endpoint["/api/external/pool/claim-complete"]["success_count"], 1
-        )
+        self.assertEqual(by_endpoint["/api/external/pool/claim-random"]["success_count"], 1)
+        self.assertEqual(by_endpoint["/api/external/pool/claim-complete"]["success_count"], 1)
         self.assertEqual(by_endpoint["/api/external/pool/stats"]["success_count"], 1)
 
     def test_external_pool_e2e_public_mode_disable_and_pool_access_chain(self):
         client = self.app.test_client()
-        self._create_external_api_key(
-            "partner-deny", "pool-e2e-deny", pool_access=False
-        )
+        self._create_external_api_key("partner-deny", "pool-e2e-deny", pool_access=False)
         self._insert_pool_account(provider="outlook")
 
         deny_resp = client.post(
@@ -203,14 +183,10 @@ class ExternalPoolE2ETests(unittest.TestCase):
             from outlook_web.repositories import settings as settings_repo
 
             settings_repo.set_setting("external_api_public_mode", "true")
-            settings_repo.set_setting(
-                "external_api_ip_whitelist", json.dumps(["127.0.0.1"])
-            )
+            settings_repo.set_setting("external_api_ip_whitelist", json.dumps(["127.0.0.1"]))
             settings_repo.set_setting("external_api_disable_pool_claim_random", "true")
 
-        allow_key = self._create_external_api_key(
-            "partner-allow", "pool-e2e-allow", pool_access=True
-        )
+        allow_key = self._create_external_api_key("partner-allow", "pool-e2e-allow", pool_access=True)
         self.assertIsNotNone(allow_key)
 
         feature_disabled_resp = client.post(

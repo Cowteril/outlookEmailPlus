@@ -5,8 +5,7 @@ from typing import Any
 from flask import jsonify, request
 
 from outlook_web.repositories import settings as settings_repo
-from outlook_web.security.auth import api_key_required
-from outlook_web.security.auth import get_external_api_consumer
+from outlook_web.security.auth import api_key_required, get_external_api_consumer
 from outlook_web.security.external_api_guard import external_api_guards
 from outlook_web.services import external_api as external_api_service
 from outlook_web.services.pool import (
@@ -18,9 +17,7 @@ from outlook_web.services.pool import (
 )
 
 
-def _audit(
-    endpoint: str, status: str, *, details: dict[str, Any], email_addr: str = ""
-) -> None:
+def _audit(endpoint: str, status: str, *, details: dict[str, Any], email_addr: str = "") -> None:
     external_api_service.audit_external_api_access(
         action="external_api_access",
         email_addr=email_addr,
@@ -148,16 +145,12 @@ def api_external_pool_claim_release():
 
     if account_id is None:
         _audit(endpoint, "error", details={"code": "ACCOUNT_ID_MISSING"})
-        return jsonify(
-            external_api_service.fail("ACCOUNT_ID_MISSING", "account_id 不能为空")
-        ), 400
+        return jsonify(external_api_service.fail("ACCOUNT_ID_MISSING", "account_id 不能为空")), 400
     try:
         account_id = int(account_id)
     except (TypeError, ValueError):
         _audit(endpoint, "error", details={"code": "ACCOUNT_ID_INVALID"})
-        return jsonify(
-            external_api_service.fail("ACCOUNT_ID_INVALID", "account_id 必须为整数")
-        ), 400
+        return jsonify(external_api_service.fail("ACCOUNT_ID_INVALID", "account_id 必须为整数")), 400
 
     try:
         release_claim(
@@ -168,11 +161,7 @@ def api_external_pool_claim_release():
             reason=reason,
         )
         _audit(endpoint, "ok", details={"account_id": account_id})
-        return jsonify(
-            external_api_service.ok(
-                {"account_id": account_id, "pool_status": "available"}
-            )
-        )
+        return jsonify(external_api_service.ok({"account_id": account_id, "pool_status": "available"}))
     except PoolServiceError as exc:
         return _error_response(endpoint, exc)
     except Exception as exc:
@@ -204,16 +193,12 @@ def api_external_pool_claim_complete():
 
     if account_id is None:
         _audit(endpoint, "error", details={"code": "ACCOUNT_ID_MISSING"})
-        return jsonify(
-            external_api_service.fail("ACCOUNT_ID_MISSING", "account_id 不能为空")
-        ), 400
+        return jsonify(external_api_service.fail("ACCOUNT_ID_MISSING", "account_id 不能为空")), 400
     try:
         account_id = int(account_id)
     except (TypeError, ValueError):
         _audit(endpoint, "error", details={"code": "ACCOUNT_ID_INVALID"})
-        return jsonify(
-            external_api_service.fail("ACCOUNT_ID_INVALID", "account_id 必须为整数")
-        ), 400
+        return jsonify(external_api_service.fail("ACCOUNT_ID_INVALID", "account_id 必须为整数")), 400
 
     try:
         new_status = complete_claim(
@@ -233,11 +218,7 @@ def api_external_pool_claim_complete():
                 "pool_status": new_status,
             },
         )
-        return jsonify(
-            external_api_service.ok(
-                {"account_id": account_id, "pool_status": new_status}
-            )
-        )
+        return jsonify(external_api_service.ok({"account_id": account_id, "pool_status": new_status}))
     except PoolServiceError as exc:
         return _error_response(endpoint, exc)
     except Exception as exc:

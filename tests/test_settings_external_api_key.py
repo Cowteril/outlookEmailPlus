@@ -22,12 +22,8 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
             settings_repo.set_setting("external_api_key", "")
             settings_repo.set_setting("pool_external_enabled", "false")
             settings_repo.set_setting("external_api_disable_pool_claim_random", "false")
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_release", "false"
-            )
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_complete", "false"
-            )
+            settings_repo.set_setting("external_api_disable_pool_claim_release", "false")
+            settings_repo.set_setting("external_api_disable_pool_claim_complete", "false")
             settings_repo.set_setting("external_api_disable_pool_stats", "false")
 
     def _login(self, client, password: str = "testpass123"):
@@ -107,9 +103,7 @@ class ExternalApiKeySettingsTests(unittest.TestCase):
 
     def test_get_settings_exposes_external_api_keys_list(self):
         with self.app.app_context():
-            from outlook_web.repositories import (
-                external_api_keys as external_api_keys_repo,
-            )
+            from outlook_web.repositories import external_api_keys as external_api_keys_repo
 
             external_api_keys_repo.create_external_api_key(
                 name="partner-a",

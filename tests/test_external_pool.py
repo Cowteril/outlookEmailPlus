@@ -30,12 +30,8 @@ class ExternalPoolApiTests(unittest.TestCase):
             settings_repo.set_setting("pool_external_enabled", "false")
             settings_repo.set_setting("external_api_ip_whitelist", "[]")
             settings_repo.set_setting("external_api_disable_pool_claim_random", "false")
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_release", "false"
-            )
-            settings_repo.set_setting(
-                "external_api_disable_pool_claim_complete", "false"
-            )
+            settings_repo.set_setting("external_api_disable_pool_claim_release", "false")
+            settings_repo.set_setting("external_api_disable_pool_claim_complete", "false")
             settings_repo.set_setting("external_api_disable_pool_stats", "false")
 
     @staticmethod
@@ -57,9 +53,7 @@ class ExternalPoolApiTests(unittest.TestCase):
         enabled: bool = True,
     ):
         with self.app.app_context():
-            from outlook_web.repositories import (
-                external_api_keys as external_api_keys_repo,
-            )
+            from outlook_web.repositories import external_api_keys as external_api_keys_repo
 
             return external_api_keys_repo.create_external_api_key(
                 name=name,
@@ -73,9 +67,7 @@ class ExternalPoolApiTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            settings_repo.set_setting(
-                "external_api_public_mode", "true" if enabled else "false"
-            )
+            settings_repo.set_setting("external_api_public_mode", "true" if enabled else "false")
 
     def _set_ip_whitelist(self, ips: list[str]):
         import json
@@ -91,9 +83,7 @@ class ExternalPoolApiTests(unittest.TestCase):
 
             settings_repo.set_setting(setting_key, "true" if enabled else "false")
 
-    def _insert_pool_account(
-        self, *, provider: str = "outlook", pool_status: str = "available"
-    ) -> int:
+    def _insert_pool_account(self, *, provider: str = "outlook", pool_status: str = "available") -> int:
         email_addr = f"{uuid.uuid4().hex}@extpool.test"
         with self.app.app_context():
             from outlook_web.db import get_db
@@ -119,9 +109,7 @@ class ExternalPoolApiTests(unittest.TestCase):
                 ),
             )
             db.commit()
-            row = db.execute(
-                "SELECT id FROM accounts WHERE email = ?", (email_addr,)
-            ).fetchone()
+            row = db.execute("SELECT id FROM accounts WHERE email = ?", (email_addr,)).fetchone()
             return int(row["id"])
 
     def test_external_pool_stats_requires_api_key(self):
@@ -184,6 +172,27 @@ class ExternalPoolApiTests(unittest.TestCase):
         data = resp.get_json()
         self.assertTrue(data.get("success"))
         self.assertEqual(data.get("code"), "OK")
+
+    def test_external_pool_blueprint_applies_csrf_exempt_to_all_handlers(self):
+        from outlook_web.routes import external_pool as external_pool_routes
+
+        wrapped_handlers = []
+
+        def fake_csrf_exempt(handler):
+            wrapped_handlers.append(handler.__name__)
+            return handler
+
+        external_pool_routes.create_blueprint(csrf_exempt=fake_csrf_exempt)
+
+        self.assertEqual(
+            set(wrapped_handlers),
+            {
+                "api_external_pool_claim_random",
+                "api_external_pool_claim_release",
+                "api_external_pool_claim_complete",
+                "api_external_pool_stats",
+            },
+        )
 
     def test_external_pool_claim_release_caller_mismatch(self):
         client = self.app.test_client()
@@ -436,9 +445,7 @@ class ExternalPoolApiTests(unittest.TestCase):
 
     def test_external_pool_claim_random_requires_pool_access_for_multi_key(self):
         client = self.app.test_client()
-        self._create_external_api_key(
-            "partner-a", "multi-pool-random-deny", pool_access=False
-        )
+        self._create_external_api_key("partner-a", "multi-pool-random-deny", pool_access=False)
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 

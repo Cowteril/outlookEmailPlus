@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import secrets
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
-
-import sqlite3
-
 
 RESULT_TO_POOL_STATUS: Dict[str, str] = {
     "success": "used",
@@ -57,9 +55,7 @@ def claim_atomic(
             params.append(tag_name)
 
     if exclude_recent_minutes and exclude_recent_minutes > 0:
-        cutoff = (
-            _utcnow() - timedelta(minutes=exclude_recent_minutes)
-        ).isoformat() + "Z"
+        cutoff = (_utcnow() - timedelta(minutes=exclude_recent_minutes)).isoformat() + "Z"
         sql += " AND (a.last_claimed_at IS NULL OR a.last_claimed_at < ?)"
         params.append(cutoff)
 
@@ -73,9 +69,7 @@ def claim_atomic(
         return None
 
     now_str = _utcnow().isoformat() + "Z"
-    lease_expires_at_str = (
-        _utcnow() + timedelta(seconds=lease_seconds)
-    ).isoformat() + "Z"
+    lease_expires_at_str = (_utcnow() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
     token = "clm_" + secrets.token_urlsafe(9)
 
     conn.execute(
@@ -259,12 +253,10 @@ def recover_cooldown(conn: sqlite3.Connection, cooldown_seconds: int) -> int:
 
 
 def get_stats(conn: sqlite3.Connection) -> dict:
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT pool_status, COUNT(*) as cnt FROM accounts
         GROUP BY pool_status
-        """
-    ).fetchall()
+        """).fetchall()
     pool_counts: dict = {
         "available": 0,
         "claimed": 0,
@@ -274,6 +266,7 @@ def get_stats(conn: sqlite3.Connection) -> dict:
         "retired": 0,
     }
     for row in rows:
+        # external API 只暴露池内状态；NULL/池外账号不应出现在契约里。
         key = row["pool_status"]
         if key in pool_counts:
             pool_counts[key] = row["cnt"]

@@ -162,6 +162,10 @@
         // 显示添加账号模态框
         function showAddAccountModal() {
             document.getElementById('accountInput').value = '';
+            const addToPoolCheckbox = document.getElementById('addToPoolCheckbox');
+            if (addToPoolCheckbox) {
+                addToPoolCheckbox.checked = false;
+            }
             // 设置默认分组为当前选中的分组
             if (currentGroupId) {
                 document.getElementById('importGroupSelect').value = currentGroupId;
@@ -203,6 +207,7 @@
             const groupId = parseInt(document.getElementById('importGroupSelect').value);
             const providerEl = document.getElementById('accountProvider');
             const provider = providerEl ? (providerEl.value || 'outlook') : 'outlook';
+            const addToPool = Boolean(document.getElementById('addToPoolCheckbox')?.checked);
 
             if (!input) {
                 showToast('请输入账号信息', 'error');
@@ -210,7 +215,7 @@
             }
 
             try {
-                const payload = { account_string: input, group_id: groupId };
+                const payload = { account_string: input, group_id: groupId, add_to_pool: addToPool };
 
                 if (provider === 'auto') {
                     payload.provider = 'auto';

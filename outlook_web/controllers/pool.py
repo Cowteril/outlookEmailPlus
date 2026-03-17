@@ -38,9 +38,7 @@ def _success_response(data: dict, http_status: int = 200):
 
 def _error_response(error_code: str, message: str, http_status: int = 400):
     """统一失败响应：{"success": false, "error": "...", "message": "..."}"""
-    return jsonify(
-        {"success": False, "error": error_code, "message": message}
-    ), http_status
+    return jsonify({"success": False, "error": error_code, "message": message}), http_status
 
 
 def api_claim_random():
