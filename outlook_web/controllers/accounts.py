@@ -77,6 +77,36 @@ def _build_account_import_failure_response(
     )
 
 
+def _parse_imap_port(value: Any) -> int | None:
+    try:
+        port = int((value or "").strip() if isinstance(value, str) else value)
+    except Exception:
+        return None
+    return port if 1 <= port <= 65535 else None
+
+
+def _looks_like_imap_host(value: str) -> bool:
+    text = (value or "").strip().lower()
+    return bool(text and "." in text and "@" not in text and " " not in text)
+
+
+def _is_outlook_basic_auth_target(email_addr: str, host: str = "", provider_key: str = "") -> bool:
+    from outlook_web.services.providers import infer_provider_from_email
+
+    inferred_provider = infer_provider_from_email(email_addr)
+    normalized_host = (host or "").strip().lower()
+    normalized_provider = (provider_key or "").strip().lower()
+    return (
+        inferred_provider == "outlook"
+        or normalized_provider == "outlook"
+        or normalized_host in {"outlook.live.com", "outlook.office365.com"}
+    )
+
+
+def _outlook_basic_auth_import_error() -> str:
+    return "Outlook 邮箱不支持 IMAP Basic Auth 直连（包括 custom host 导入），请使用 4 段 OAuth 格式：邮箱----密码----client_id----refresh_token"
+
+
 # ==================== 账号基础 CRUD API ====================
 
 
@@ -148,6 +178,7 @@ def api_get_accounts() -> Any:
                 "updated_at": acc.get("updated_at", ""),
                 "tags": acc.get("tags", []),
                 "telegram_push_enabled": bool(acc.get("telegram_push_enabled")),
+                "notification_enabled": bool(acc.get("telegram_push_enabled")),
             }
         )
     return jsonify({"success": True, "accounts": safe_accounts})
@@ -178,6 +209,8 @@ def api_get_account(account_id: int) -> Any:
                 "status": account.get("status", "active"),
                 "account_type": account.get("account_type") or "outlook",
                 "provider": account.get("provider") or "outlook",
+                "telegram_push_enabled": bool(account.get("telegram_push_enabled")),
+                "notification_enabled": bool(account.get("telegram_push_enabled")),
                 "created_at": account.get("created_at", ""),
                 "updated_at": account.get("updated_at", ""),
             },
@@ -268,10 +301,14 @@ def api_add_account() -> Any:
             if custom_imap_port is None or str(custom_imap_port).strip() == "":
                 custom_port_val = 993
             else:
-                try:
-                    custom_port_val = int(str(custom_imap_port).strip())
-                except Exception:
-                    custom_port_val = 993
+                custom_port_val = _parse_imap_port(custom_imap_port)
+                if custom_port_val is None:
+                    return build_error_response(
+                        "INVALID_PARAM",
+                        "自定义 IMAP 端口无效，应为 1-65535",
+                        message_en="Custom IMAP port is invalid. Expected 1-65535",
+                        status=400,
+                    )
         else:
             custom_port_val = None
 
@@ -315,16 +352,36 @@ def api_add_account() -> Any:
                 # 3) 2 段（配合输入框）：email----imap_password（host/port 从 request body 取）
                 if len(parts) >= 5 and (parts[2] or "").strip().lower() == "custom":
                     imap_host = (parts[3] or "").strip()
-                    try:
-                        imap_port = int((parts[4] or "").strip() or 993)
-                    except Exception:
-                        imap_port = 993
+                    raw_port = (parts[4] or "").strip()
+                    if not raw_port:
+                        failed += 1
+                        errors_total += 1
+                        if len(errors) < max_error_details:
+                            errors.append({"line": line_no, "email": email_addr, "error": "custom 5段格式缺少 IMAP 端口"})
+                        continue
+                    imap_port = _parse_imap_port(raw_port)
+                    if imap_port is None:
+                        failed += 1
+                        errors_total += 1
+                        if len(errors) < max_error_details:
+                            errors.append({"line": line_no, "email": email_addr, "error": "custom IMAP 端口无效，应为 1-65535"})
+                        continue
                 elif len(parts) >= 4:
                     imap_host = (parts[2] or "").strip()
-                    try:
-                        imap_port = int((parts[3] or "").strip() or 993)
-                    except Exception:
-                        imap_port = 993
+                    raw_port = (parts[3] or "").strip()
+                    if not raw_port:
+                        failed += 1
+                        errors_total += 1
+                        if len(errors) < max_error_details:
+                            errors.append({"line": line_no, "email": email_addr, "error": "custom 4段格式缺少 IMAP 端口"})
+                        continue
+                    imap_port = _parse_imap_port(raw_port)
+                    if imap_port is None:
+                        failed += 1
+                        errors_total += 1
+                        if len(errors) < max_error_details:
+                            errors.append({"line": line_no, "email": email_addr, "error": "custom IMAP 端口无效，应为 1-65535"})
+                        continue
                 else:
                     imap_host = custom_imap_host
                     imap_port = custom_port_val if custom_port_val is not None else 993
@@ -371,6 +428,13 @@ def api_add_account() -> Any:
                             }
                         )
                     continue
+
+            if _is_outlook_basic_auth_target(email_addr, imap_host, provider):
+                failed += 1
+                errors_total += 1
+                if len(errors) < max_error_details:
+                    errors.append({"line": line_no, "email": email_addr, "error": _outlook_basic_auth_import_error()})
+                continue
 
             ok = accounts_repo.add_account(
                 email_addr,
@@ -583,12 +647,16 @@ def _detect_line_type(
         email = parts[0].strip()
         imap_pwd = parts[1].strip()
         host = (parts[3] or "").strip()
-        try:
-            port = int((parts[4] or "").strip() or 993)
-        except Exception:
-            port = 993
+        raw_port = (parts[4] or "").strip()
         if not email or not imap_pwd or not host:
             return _err("custom 5段格式缺少必要字段")
+        if not raw_port:
+            return _err("custom 5段格式缺少 IMAP 端口")
+        port = _parse_imap_port(raw_port)
+        if port is None:
+            return _err("custom IMAP 端口无效，应为 1-65535")
+        if _is_outlook_basic_auth_target(email, host, "custom"):
+            return _err(_outlook_basic_auth_import_error())
         return {
             "type": "imap",
             "provider": "custom",
@@ -596,6 +664,29 @@ def _detect_line_type(
             "error": None,
             "auto_group_name": PROVIDER_GROUP_NAME.get("custom", "自定义IMAP"),
         }
+
+    if n == 4:
+        email = parts[0].strip()
+        imap_pwd = parts[1].strip()
+        host = (parts[2] or "").strip()
+        raw_port = (parts[3] or "").strip()
+        if _looks_like_imap_host(host):
+            if not email or not imap_pwd:
+                return _err("4段格式缺少邮箱或密码")
+            if not raw_port:
+                return _err("custom 4段格式缺少 IMAP 端口")
+            port = _parse_imap_port(raw_port)
+            if port is None:
+                return _err("custom IMAP 端口无效，应为 1-65535")
+            if _is_outlook_basic_auth_target(email, host, "custom"):
+                return _err(_outlook_basic_auth_import_error())
+            return {
+                "type": "imap",
+                "provider": "custom",
+                "fields": {"email": email, "imap_password": imap_pwd, "imap_host": host, "imap_port": port},
+                "error": None,
+                "auto_group_name": PROVIDER_GROUP_NAME.get("custom", "自定义IMAP"),
+            }
 
     # n >= 4 → Outlook（OAuth）
     if n >= 4:
@@ -622,6 +713,8 @@ def _detect_line_type(
             return _err("3段格式缺少邮箱或密码")
         if prov not in KNOWN_PROVIDER_KEYS:
             return _err(f"未知的 provider: {prov}")
+        if prov == "outlook":
+            return _err("Outlook 三段格式不支持密码直连，请使用 4 段 OAuth 格式：邮箱----密码----client_id----refresh_token")
         cfg = MAIL_PROVIDERS.get(prov, {})
         host = cfg.get("imap_host", "")
         port = int(cfg.get("imap_port", 993))
@@ -643,6 +736,8 @@ def _detect_line_type(
             return _err("2段格式缺少邮箱或密码")
         prov = infer_provider_from_email(email)
         if prov:
+            if prov == "outlook":
+                return _err("Outlook 两段格式不支持密码直连，请使用 4 段 OAuth 格式：邮箱----密码----client_id----refresh_token")
             cfg = MAIL_PROVIDERS.get(prov, {})
             host = cfg.get("imap_host", "")
             port = int(cfg.get("imap_port", 993))
@@ -1041,6 +1136,25 @@ def api_update_account(account_id: int) -> Any:
         )
         return jsonify({"success": False, "error": error_payload}), 403
 
+    existing_account = accounts_repo.get_account_by_id(account_id)
+    if not existing_account:
+        return build_error_response("ACCOUNT_NOT_FOUND", "账号不存在", message_en="Account not found", status=404)
+
+    account_type = (existing_account.get("account_type") or "outlook").strip().lower()
+    if account_type != "imap":
+        submitted_client_id = client_id.strip() if isinstance(client_id, str) else ""
+        submitted_refresh_token = refresh_token.strip() if isinstance(refresh_token, str) else ""
+        existing_client_id = (existing_account.get("client_id") or "").strip()
+        client_id_changed = bool(submitted_client_id) and submitted_client_id != existing_client_id
+
+        if client_id_changed and not submitted_refresh_token:
+            return build_error_response(
+                "OUTLOOK_REFRESH_TOKEN_REQUIRED",
+                "修改 Client ID 时必须同时提供 Refresh Token",
+                message_en="Refresh Token is required when changing Client ID",
+                status=400,
+            )
+
     if accounts_repo.update_account(
         account_id,
         email_addr,
@@ -1074,17 +1188,33 @@ def api_update_account(account_id: int) -> Any:
 
 def _api_update_account_status(account_id: int, status: str) -> Any:
     """只更新账号状态"""
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in {"active", "inactive", "disabled"}:
+        return build_error_response(
+            "INVALID_PARAM",
+            "状态值无效",
+            message_en="Invalid account status",
+            status=400,
+        )
+
     db = get_db()
     try:
-        db.execute(
+        cursor = db.execute(
             """
             UPDATE accounts
             SET status = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """,
-            (status, account_id),
+            (normalized_status, account_id),
         )
         db.commit()
+        if cursor.rowcount <= 0:
+            return build_error_response(
+                "ACCOUNT_NOT_FOUND",
+                "账号不存在",
+                message_en="Account not found",
+                status=404,
+            )
         return jsonify({"success": True, "message": "状态更新成功"})
     except Exception:
         return build_error_response("ACCOUNT_STATUS_UPDATE_FAILED", "更新失败", message_en="Failed to update account status", status=500)
@@ -1373,6 +1503,8 @@ def api_search_accounts() -> Any:
                 "created_at": acc["created_at"] if acc["created_at"] else "",
                 "updated_at": acc["updated_at"] if acc["updated_at"] else "",
                 "tags": tags,
+                "telegram_push_enabled": bool(acc.get("telegram_push_enabled")),
+                "notification_enabled": bool(acc.get("telegram_push_enabled")),
                 "last_refresh_status": (last_refresh_log.get("status") if last_refresh_log else None),
                 "last_refresh_error": (last_refresh_log.get("error_message") if last_refresh_log else None),
             }
@@ -1626,7 +1758,10 @@ REFRESH_LOCK_NAME = "refresh_all_tokens"
 def api_refresh_account(account_id: int) -> Any:
     """刷新单个账号的 token"""
     db = get_db()
-    cursor = db.execute("SELECT id, email, client_id, refresh_token, group_id FROM accounts WHERE id = ?", (account_id,))
+    cursor = db.execute(
+        "SELECT id, email, client_id, refresh_token, group_id, account_type FROM accounts WHERE id = ?",
+        (account_id,),
+    )
     account = cursor.fetchone()
 
     if not account:
@@ -1643,6 +1778,16 @@ def api_refresh_account(account_id: int) -> Any:
     account_email = account["email"]
     client_id = account["client_id"]
     encrypted_refresh_token = account["refresh_token"]
+
+    if not refresh_service.is_refreshable_outlook_account(account["account_type"]):
+        return build_error_response(
+            "ACCOUNT_REFRESH_UNSUPPORTED",
+            "IMAP 账号不支持 Token 刷新",
+            message_en="IMAP accounts do not support token refresh",
+            err_type="UnsupportedOperationError",
+            status=400,
+            details=f"account_id={account_id}, account_type={account['account_type']}",
+        )
 
     # 获取分组代理设置
     proxy_url = ""
@@ -1936,12 +2081,12 @@ def api_get_refresh_stats() -> Any:
     )
 
 
-# ==================== Telegram 推送 API ====================
+# ==================== 通知参与 API（兼容旧 Telegram 路径） ====================
 
 
 @login_required
 def api_telegram_toggle(account_id: int) -> Any:
-    """切换账号 Telegram 推送开关"""
+    """切换账号通知参与开关。兼容旧 Telegram 专用接口路径。"""
     data = request.get_json(silent=True) or {}
     enabled = bool(data.get("enabled", False))
     success = accounts_repo.toggle_telegram_push(account_id, enabled)
@@ -1961,7 +2106,8 @@ def api_telegram_toggle(account_id: int) -> Any:
         {
             "success": True,
             "enabled": enabled,
-            "message": f"Telegram推送已{action}",
-            "message_en": f"Telegram notification {'enabled' if enabled else 'disabled'}",
+            "notification_enabled": enabled,
+            "message": f"该邮箱通知参与已{action}",
+            "message_en": f"Mailbox notifications {'enabled' if enabled else 'disabled'}",
         }
     )

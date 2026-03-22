@@ -64,6 +64,10 @@
                 </div>
             `;
             document.getElementById('emailDetailToolbar').style.display = 'none';
+
+            if (typeof syncPollingForCurrentAccount === 'function') {
+                syncPollingForCurrentAccount({ restart: true });
+            }
         }
 
         // Provider 下拉缓存
@@ -349,13 +353,16 @@
                 if (data.success) {
                     const acc = data.account;
                     const isImap = (acc.account_type || 'outlook') === 'imap';
+                    const clientIdInput = document.getElementById('editClientId');
+                    const refreshTokenInput = document.getElementById('editRefreshToken');
 
                     document.getElementById('editAccountId').value = acc.id;
                     document.getElementById('editAccountType').value = acc.account_type || 'outlook';
                     document.getElementById('editEmail').value = acc.email;
                     document.getElementById('editPassword').value = acc.password || '';
-                    document.getElementById('editClientId').value = acc.client_id;
-                    document.getElementById('editRefreshToken').value = acc.refresh_token;
+                    clientIdInput.value = acc.client_id;
+                    clientIdInput.dataset.originalValue = acc.client_id || '';
+                    refreshTokenInput.value = acc.refresh_token;
                     document.getElementById('editGroupSelect').value = acc.group_id || 1;
                     document.getElementById('editRemark').value = acc.remark || '';
                     document.getElementById('editStatus').value = acc.status || 'active';
@@ -370,11 +377,13 @@
                         refreshTokenGroup.style.display = 'none';
                         passwordLabel.textContent = translateAppTextLocal('授权码 / 应用密码');
                         document.getElementById('editPassword').placeholder = translateAppTextLocal('留空则不修改');
+                        refreshTokenInput.placeholder = '';
                     } else {
                         clientIdGroup.style.display = '';
                         refreshTokenGroup.style.display = '';
                         passwordLabel.textContent = translateAppTextLocal('密码');
                         document.getElementById('editPassword').placeholder = translateAppTextLocal('可选，留空则不修改');
+                        refreshTokenInput.placeholder = translateAppTextLocal('留空则不修改');
                     }
 
                     document.getElementById('editAccountModal').classList.add('show');
@@ -396,12 +405,19 @@
             const isImap = accountType === 'imap';
             const oldGroupId = currentGroupId;
             const newGroupId = parseInt(document.getElementById('editGroupSelect').value);
+            const clientIdInput = document.getElementById('editClientId');
+            const refreshTokenInput = document.getElementById('editRefreshToken');
+            const clientId = clientIdInput.value.trim();
+            const refreshToken = refreshTokenInput.value.trim();
+            const originalClientId = (clientIdInput.dataset.originalValue || '').trim();
+            const hasClientIdChanged = !isImap && clientId !== originalClientId;
+            const wantsToUpdateOutlookCredentials = !isImap && (hasClientIdChanged || !!refreshToken);
 
             const data = {
                 email: document.getElementById('editEmail').value.trim(),
                 password: document.getElementById('editPassword').value,
-                client_id: document.getElementById('editClientId').value.trim(),
-                refresh_token: document.getElementById('editRefreshToken').value.trim(),
+                client_id: wantsToUpdateOutlookCredentials ? clientId : '',
+                refresh_token: wantsToUpdateOutlookCredentials ? refreshToken : '',
                 group_id: newGroupId,
                 remark: document.getElementById('editRemark').value.trim(),
                 status: document.getElementById('editStatus').value
@@ -412,8 +428,8 @@
                 return;
             }
 
-            // Outlook 账号需要 Client ID 和 Refresh Token
-            if (!isImap && (!data.client_id || !data.refresh_token)) {
+            // 仅在用户真正修改 Outlook 凭据时，才要求提交完整凭据对
+            if (wantsToUpdateOutlookCredentials && (!data.client_id || !data.refresh_token)) {
                 showToast(translateAppTextLocal('邮箱、Client ID 和 Refresh Token 不能为空'), 'error');
                 return;
             }
@@ -581,7 +597,7 @@
             }
         }
 
-        // 切换 Telegram 推送开关
+        // 切换账号通知参与开关（沿用旧 Telegram 接口）
         async function toggleTelegramPush(accountId, enabled) {
             try {
                 const response = await fetch(`/api/accounts/${accountId}/telegram-toggle`, {
@@ -594,8 +610,8 @@
                     showToast(
                         pickApiMessage(
                             data,
-                            data.message || (enabled ? 'Telegram推送已开启' : 'Telegram推送已关闭'),
-                            enabled ? 'Telegram notification enabled' : 'Telegram notification disabled'
+                            data.message || (enabled ? '该邮箱通知参与已开启' : '该邮箱通知参与已关闭'),
+                            enabled ? 'Mailbox notifications enabled' : 'Mailbox notifications disabled'
                         ),
                         'success'
                     );
@@ -604,7 +620,7 @@
                         loadAccountsByGroup(currentGroupId, true);
                     }
                 } else {
-                    handleApiError(data, 'Telegram推送切换失败');
+                    handleApiError(data, '通知参与切换失败');
                 }
             } catch (error) {
                 showToast(translateAppTextLocal('操作失败'), 'error');

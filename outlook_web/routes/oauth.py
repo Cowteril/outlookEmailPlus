@@ -18,4 +18,9 @@ def create_blueprint() -> Blueprint:
         view_func=oauth_controller.api_exchange_oauth_token,
         methods=["POST"],
     )
+    bp.add_url_rule(
+        "/oauth/callback",
+        view_func=oauth_controller.oauth_callback_page,
+        methods=["GET"],
+    )
     return bp

@@ -1,5 +1,6 @@
 // 全局状态
         let csrfToken = null;
+        let csrfTokenRefreshPromise = null;
         let currentAccount = null;
         let currentGroupId = null;
         let currentEmails = [];
@@ -27,11 +28,13 @@
         let pollingCount = 0;
         let maxPollingCount = 5;
         let pollingInterval = 10;
+        let autoPollingEnabled = false;
         let isPolling = false;
         let knownEmailIds = new Set();
 
         // 导航状态
         let currentPage = 'dashboard';
+        let accountPanelDensitySyncHandle = null;
 
         function getUiLanguage() {
             return window.getCurrentUiLanguage ? window.getCurrentUiLanguage() : 'zh';
@@ -52,6 +55,68 @@
         const formatUiRelativeTime = (dateStr, fallbackZh = '从未刷新', fallbackEn = 'Never refreshed') => (
             window.formatUiRelativeTime ? window.formatUiRelativeTime(dateStr, fallbackZh, fallbackEn) : (dateStr || fallbackZh)
         );
+
+        function parseIntegerSetting(value, fallback) {
+            if (value === null || value === undefined) {
+                return fallback;
+            }
+            const normalized = String(value).trim();
+            if (!normalized) {
+                return fallback;
+            }
+            const parsed = Number.parseInt(normalized, 10);
+            return Number.isNaN(parsed) ? fallback : parsed;
+        }
+
+        function isAutoPollingEnabledSetting(value) {
+            return value === true || value === 'true';
+        }
+
+        function syncPollingForCurrentAccount({ restart = false, forceRefresh = false } = {}) {
+            if (isTempEmailGroup || !currentAccount) {
+                if (isPolling && (!autoPollingEnabled || restart)) {
+                    stopPolling(true);
+                }
+                return;
+            }
+
+            if (!autoPollingEnabled) {
+                if (isPolling) {
+                    stopPolling(true);
+                }
+                return;
+            }
+
+            const cacheKey = `${currentAccount}_${currentFolder}`;
+            const hasCachedEmails = Object.prototype.hasOwnProperty.call(emailListCache, cacheKey);
+            const cachedEmails = hasCachedEmails ? emailListCache[cacheKey].emails : null;
+
+            if (restart && isPolling) {
+                stopPolling(true);
+            }
+
+            if (isPolling) {
+                return;
+            }
+
+            if (forceRefresh || !hasCachedEmails) {
+                loadEmails(currentAccount, forceRefresh);
+                return;
+            }
+
+            if (Array.isArray(cachedEmails)) {
+                currentEmails = cachedEmails;
+            }
+
+            startPolling();
+        }
+
+        function applyPollingSettings(settings, { restart = false, forceRefresh = false } = {}) {
+            autoPollingEnabled = isAutoPollingEnabledSetting(settings.enable_auto_polling);
+            pollingInterval = parseIntegerSetting(settings.polling_interval, 10);
+            maxPollingCount = parseIntegerSetting(settings.polling_count, 5);
+            syncPollingForCurrentAccount({ restart, forceRefresh });
+        }
 
         // ==================== 主题 & 导航 ====================
 
@@ -92,6 +157,8 @@
                 } else if (currentGroupId) {
                     loadAccountsByGroup(currentGroupId);
                 }
+                syncAccountPanelDensityIfVisible();
+                scheduleAccountPanelDensitySync();
             }
             if (page === 'temp-emails' && typeof loadTempEmails === 'function') loadTempEmails(true);
             if (page === 'settings') loadSettings();
@@ -268,6 +335,48 @@
             panel.classList.toggle('is-compact', width < 170);
         }
 
+        function syncAccountPanelDensityIfVisible() {
+            const page = document.getElementById('page-mailbox');
+            const panel = document.getElementById('accountPanel');
+            if (!page || !panel || page.classList.contains('page-hidden')) {
+                return false;
+            }
+
+            const width = panel.getBoundingClientRect().width;
+            if (width <= 0) {
+                return false;
+            }
+
+            panel.classList.toggle('is-narrow', width < 240);
+            panel.classList.toggle('is-compact', width < 170);
+            return true;
+        }
+
+        function scheduleAccountPanelDensitySync() {
+            const runSync = () => {
+                accountPanelDensitySyncHandle = null;
+                syncAccountPanelDensityIfVisible();
+            };
+
+            if (accountPanelDensitySyncHandle !== null) {
+                if (typeof cancelAnimationFrame === 'function') {
+                    cancelAnimationFrame(accountPanelDensitySyncHandle);
+                } else {
+                    clearTimeout(accountPanelDensitySyncHandle);
+                }
+                accountPanelDensitySyncHandle = null;
+            }
+
+            if (typeof requestAnimationFrame === 'function') {
+                accountPanelDensitySyncHandle = requestAnimationFrame(() => {
+                    accountPanelDensitySyncHandle = requestAnimationFrame(runSync);
+                });
+                return;
+            }
+
+            accountPanelDensitySyncHandle = setTimeout(runSync, 0);
+        }
+
         function initResizeHandles() {
             document.querySelectorAll('.resize-handle').forEach(handle => {
                 handle.addEventListener('mousedown', function(e) {
@@ -322,8 +431,11 @@
                 });
             } catch(e) {}
 
-            updateAccountPanelDensity();
-            window.addEventListener('resize', updateAccountPanelDensity, { passive: true });
+            if (currentPage === 'mailbox') {
+                syncAccountPanelDensityIfVisible();
+                scheduleAccountPanelDensitySync();
+            }
+            window.addEventListener('resize', scheduleAccountPanelDensitySync, { passive: true });
         }
 
         // ==================== 邮件详情显示控制 ====================
@@ -347,33 +459,163 @@
 
         // ==================== CSRF 防护 ====================
 
-        // 初始化 CSRF Token
-        async function initCSRFToken() {
-            try {
-                const response = await fetch('/api/csrf-token');
-                const data = await response.json();
-                csrfToken = data.csrf_token;
-                if (data.csrf_disabled) {
-                    console.warn('CSRF protection is disabled. Install flask-wtf for better security.');
-                }
-            } catch (error) {
-                console.error('Failed to initialize CSRF token:', error);
+        function isMutationRequest(method) {
+            const normalizedMethod = (method || 'GET').toUpperCase();
+            return !['GET', 'HEAD', 'OPTIONS'].includes(normalizedMethod);
+        }
+
+        function cloneHeaders(headers) {
+            return new Headers(headers || {});
+        }
+
+        function buildFetchRequest(input, options = {}) {
+            if (input instanceof Request) {
+                const mergedHeaders = cloneHeaders(input.headers);
+                const optionHeaders = cloneHeaders(options.headers);
+                optionHeaders.forEach((value, key) => mergedHeaders.set(key, value));
+
+                const requestOptions = {
+                    ...options,
+                    headers: mergedHeaders
+                };
+
+                return {
+                    method: (requestOptions.method || input.method || 'GET').toUpperCase(),
+                    setHeader(name, value) {
+                        mergedHeaders.set(name, value);
+                    },
+                    execute() {
+                        return originalFetch(new Request(input, requestOptions));
+                    }
+                };
             }
+
+            const requestOptions = {
+                ...options,
+                headers: cloneHeaders(options.headers)
+            };
+
+            return {
+                method: (requestOptions.method || 'GET').toUpperCase(),
+                setHeader(name, value) {
+                    requestOptions.headers.set(name, value);
+                },
+                execute() {
+                    return originalFetch(input, requestOptions);
+                }
+            };
+        }
+
+        async function parseJsonSafely(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                return null;
+            }
+
+            try {
+                return await response.clone().json();
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function isCsrfFailurePayload(payload) {
+            if (!payload || typeof payload !== 'object') {
+                return false;
+            }
+
+            const error = payload.error && typeof payload.error === 'object' ? payload.error : payload;
+            return error.code === 'CSRF_TOKEN_INVALID';
+        }
+
+        // 初始化 CSRF Token
+        async function initCSRFToken({ force = false, silent = false } = {}) {
+            if (!force && csrfToken) {
+                return csrfToken;
+            }
+
+            if (csrfTokenRefreshPromise) {
+                return csrfTokenRefreshPromise;
+            }
+
+            csrfTokenRefreshPromise = (async () => {
+                try {
+                    const response = await originalFetch('/api/csrf-token');
+                    if (!response.ok) {
+                        throw new Error(`csrf_token_http_${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    if (data.csrf_disabled) {
+                        csrfToken = null;
+                        console.warn('CSRF protection is disabled. Install flask-wtf for better security.');
+                        return csrfToken;
+                    }
+
+                    if (!data.csrf_token) {
+                        throw new Error('csrf_token_missing_in_response');
+                    }
+
+                    csrfToken = data.csrf_token;
+                    return csrfToken;
+                } catch (error) {
+                    if (!silent) {
+                        showToast(translateAppTextLocal('初始化安全会话失败，请刷新页面后重试'), 'error');
+                    }
+                    console.error('Failed to initialize CSRF token:', error);
+                    throw error;
+                } finally {
+                    csrfTokenRefreshPromise = null;
+                }
+            })();
+
+            return csrfTokenRefreshPromise;
         }
 
         // 包装 fetch 请求，自动添加 CSRF Token
         const originalFetch = window.fetch;
-        window.fetch = function (url, options = {}) {
-            // 只对非 GET 请求添加 CSRF Token
-            if (options.method && options.method.toUpperCase() !== 'GET' && csrfToken) {
-                options.headers = options.headers || {};
-                if (options.headers instanceof Headers) {
-                    options.headers.append('X-CSRFToken', csrfToken);
-                } else {
-                    options.headers['X-CSRFToken'] = csrfToken;
+        window.fetch = async function (input, options = {}) {
+            const request = buildFetchRequest(input, options);
+            const shouldAttachCsrf = isMutationRequest(request.method);
+
+            if (shouldAttachCsrf && !csrfToken) {
+                try {
+                    await initCSRFToken({ silent: true });
+                } catch (error) {
+                    // 让原请求继续发出，由后端返回明确的 CSRF 错误提示
                 }
             }
-            return originalFetch(url, options);
+
+            if (shouldAttachCsrf && csrfToken) {
+                request.setHeader('X-CSRFToken', csrfToken);
+            }
+
+            const response = await request.execute();
+            if (!shouldAttachCsrf || options.__skipCsrfRetry || response.status !== 400) {
+                return response;
+            }
+
+            const payload = await parseJsonSafely(response);
+            if (!isCsrfFailurePayload(payload)) {
+                return response;
+            }
+
+            try {
+                await initCSRFToken({ force: true, silent: true });
+            } catch (error) {
+                return response;
+            }
+
+            if (!csrfToken) {
+                return response;
+            }
+
+            const retryRequest = buildFetchRequest(input, {
+                ...options,
+                __skipCsrfRetry: true
+            });
+            retryRequest.setHeader('X-CSRFToken', csrfToken);
+            return retryRequest.execute();
         };
 
         // 初始化
@@ -388,8 +630,11 @@
                 }
             } catch(e) {}
 
-            // 初始化 CSRF Token
-            await initCSRFToken();
+            // 初始化 CSRF Token。失败时不阻断首屏，其它初始化继续执行，
+            // 具体的写请求再走按需恢复逻辑。
+            try {
+                await initCSRFToken();
+            } catch (error) {}
 
             closeAllModals();
             loadGroups();
@@ -835,11 +1080,52 @@ ${details}
 
         // ==================== OAuth Refresh Token 相关 ====================
 
+        let oauthAuthPopup = null;
+
+        window.addEventListener('message', function (event) {
+            if (!event || event.origin !== window.location.origin) {
+                return;
+            }
+
+            const payload = event.data || {};
+            if (payload.type !== 'outlook-oauth-callback') {
+                return;
+            }
+
+            const redirectInput = document.getElementById('redirectUrlInput');
+            if (!redirectInput) {
+                return;
+            }
+
+            if (payload.redirected_url) {
+                redirectInput.value = payload.redirected_url;
+            }
+
+            event.source?.postMessage({ type: 'outlook-oauth-callback-ack' }, event.origin);
+
+            if (payload.error) {
+                showToast(`${translateAppTextLocal('微软授权失败')}: ${payload.error_description || payload.error}`, 'error');
+                return;
+            }
+
+            const passwordInput = document.getElementById('oauthVerifyPassword');
+            showToast(translateAppTextLocal('已自动接收微软授权回跳结果，请确认后换取 Token'), 'success');
+            if (passwordInput && passwordInput.value.trim()) {
+                exchangeToken();
+            }
+        });
+
         // 显示获取 Refresh Token 模态框
         async function showGetRefreshTokenModal() {
             document.getElementById('getRefreshTokenModal').classList.add('show');
 
             // 重置表单
+            document.getElementById('oauthVerifyPassword').value = '';
+            document.getElementById('oauthClientIdInput').value = '';
+            document.getElementById('oauthRedirectUriInput').value = '';
+            document.getElementById('oauthRedirectUriExample').textContent = '';
+            document.getElementById('oauthRedirectUriWarning').style.display = 'none';
+            document.getElementById('oauthRedirectUriWarning').textContent = '';
             document.getElementById('redirectUrlInput').value = '';
             document.getElementById('refreshTokenResult').style.display = 'none';
             document.getElementById('refreshTokenOutput').value = '';
@@ -857,8 +1143,16 @@ ${details}
 
                 if (data.success) {
                     document.getElementById('authUrlInput').value = data.auth_url;
+                    document.getElementById('oauthClientIdInput').value = `client_id：${data.client_id}`;
+                    document.getElementById('oauthRedirectUriInput').value = `redirect_uri：${data.redirect_uri}`;
+                    document.getElementById('oauthRedirectUriExample').textContent = `${data.redirect_uri}?code=xxxxx&state=<generated-by-system>`;
+                    if (data.redirect_uri_warning) {
+                        const warningEl = document.getElementById('oauthRedirectUriWarning');
+                        warningEl.textContent = data.redirect_uri_warning;
+                        warningEl.style.display = 'block';
+                    }
                 } else {
-                    showToast(translateAppTextLocal('获取授权链接失败'), 'error');
+                    handleApiError(data, '获取授权链接失败');
                 }
             } catch (error) {
                 showToast(translateAppTextLocal('获取授权链接失败'), 'error');
@@ -868,6 +1162,10 @@ ${details}
         // 隐藏获取 Refresh Token 模态框
         function hideGetRefreshTokenModal() {
             document.getElementById('getRefreshTokenModal').classList.remove('show');
+            if (oauthAuthPopup && !oauthAuthPopup.closed) {
+                oauthAuthPopup.close();
+            }
+            oauthAuthPopup = null;
         }
 
         // 复制授权 URL
@@ -882,17 +1180,28 @@ ${details}
         function openAuthUrl() {
             const url = document.getElementById('authUrlInput').value;
             if (url) {
-                window.open(url, '_blank');
-                showToast(translateAppTextLocal('已在新窗口打开授权页面'), 'info');
+                oauthAuthPopup = window.open(url, 'outlook-oauth-popup', 'width=720,height=860');
+                if (oauthAuthPopup) {
+                    showToast(translateAppTextLocal('已在新窗口打开授权页面'), 'info');
+                } else {
+                    showToast(translateAppTextLocal('浏览器拦截了授权窗口，请允许弹窗后重试，或复制授权链接手动打开'), 'error');
+                }
             }
         }
 
         // 换取 Token
         async function exchangeToken() {
             const redirectUrl = document.getElementById('redirectUrlInput').value.trim();
+            const password = document.getElementById('oauthVerifyPassword').value;
 
             if (!redirectUrl) {
                 showToast(translateAppTextLocal('请先粘贴授权后的完整 URL'), 'error');
+                return;
+            }
+
+            if (!password) {
+                showToast(translateAppTextLocal('请输入当前系统登录密码以完成二次验证'), 'error');
+                document.getElementById('oauthVerifyPassword').focus();
                 return;
             }
 
@@ -902,13 +1211,35 @@ ${details}
             btn.textContent = translateAppTextLocal('⏳ 换取中...');
 
             try {
+                const verifyResponse = await fetch('/api/export/verify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password
+                    })
+                });
+                const verifyData = await verifyResponse.json();
+
+                if (!verifyData.success) {
+                    handleApiError(verifyData, '二次验证失败');
+                    if (verifyData.need_verify) {
+                        document.getElementById('oauthVerifyPassword').focus();
+                    }
+                    btn.disabled = false;
+                    btn.textContent = '换取 Token';
+                    return;
+                }
+
                 const response = await fetch('/api/oauth/exchange-token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        redirected_url: redirectUrl
+                        redirected_url: redirectUrl,
+                        verify_token: verifyData.verify_token
                     })
                 });
 
@@ -931,6 +1262,9 @@ ${details}
                     showToast(translateAppTextLocal('✅ Token 获取成功！请将邮箱和密码替换后点导入'), 'success');
                 } else {
                     handleApiError(data, '换取 Token 失败');
+                    if (data.need_verify) {
+                        document.getElementById('oauthVerifyPassword').focus();
+                    }
                     btn.disabled = false;
                     btn.textContent = translateAppTextLocal('换取 Token');
                 }
@@ -968,6 +1302,7 @@ ${details}
                     name: item.name || '',
                     api_key: item.api_key || item.api_key_masked || '',
                     enabled: !(item.enabled === false || item.enabled === 'false' || item.enabled === 0 || item.enabled === '0'),
+                    pool_access: item.pool_access === true || item.pool_access === 'true' || item.pool_access === 1 || item.pool_access === '1',
                     allowed_emails: Array.isArray(item.allowed_emails) ? item.allowed_emails : []
                 };
 
@@ -1073,10 +1408,10 @@ ${details}
                     toggleRefreshStrategy();
 
                     // 加载轮询设置（后端返回 boolean，兼容处理）
-                    const enablePolling = data.settings.enable_auto_polling === true || data.settings.enable_auto_polling === 'true';
+                    const enablePolling = isAutoPollingEnabledSetting(data.settings.enable_auto_polling);
                     document.getElementById('enableAutoPolling').checked = enablePolling;
-                    document.getElementById('pollingInterval').value = data.settings.polling_interval || '10';
-                    document.getElementById('pollingCount').value = data.settings.polling_count || '5';
+                    document.getElementById('pollingInterval').value = String(parseIntegerSetting(data.settings.polling_interval, 10));
+                    document.getElementById('pollingCount').value = String(parseIntegerSetting(data.settings.polling_count, 5));
 
                     // 加载 Telegram 推送设置
                     const tgToken = document.getElementById('telegramBotToken');
@@ -1086,7 +1421,7 @@ ${details}
                     const emailRecipient = document.getElementById('emailNotificationRecipient');
                     if (tgToken) tgToken.value = data.telegram_bot_token || '';
                     if (tgChat) tgChat.value = data.telegram_chat_id || '';
-                    if (tgPoll) tgPoll.value = data.telegram_poll_interval || '600';
+                    if (tgPoll) tgPoll.value = String(parseIntegerSetting(data.telegram_poll_interval, 600));
                     if (emailEnabled) emailEnabled.checked = !!data.settings.email_notification_enabled;
                     if (emailRecipient) emailRecipient.value = data.settings.email_notification_recipient || '';
                 }
@@ -1318,8 +1653,8 @@ ${details}
                 settings.telegram_chat_id = tgChatId;
             }
             if (!isNaN(tgPollInterval)) {
-                if (tgPollInterval < 60 || tgPollInterval > 3600) {
-                    showToast(translateAppTextLocal('Telegram 轮询间隔必须在 60-3600 秒之间'), 'error');
+                if (tgPollInterval < 10 || tgPollInterval > 86400) {
+                    showToast(translateAppTextLocal('Telegram 轮询间隔必须在 10-86400 秒之间'), 'error');
                     return;
                 }
                 settings.telegram_poll_interval = tgPollInterval;
@@ -1335,6 +1670,7 @@ ${details}
                 const data = await response.json();
 
                 if (data.success) {
+                    applyPollingSettings(settings, { restart: true });
                     showToast(pickApiMessage(data, '设置已保存，重启应用后生效', 'Settings saved successfully'), 'success');
                     hideSettingsModal();
                 } else {
@@ -1390,14 +1726,7 @@ ${details}
                 const data = await response.json();
 
                 if (data.success) {
-                    pollingInterval = parseInt(data.settings.polling_interval) || 10;
-                    maxPollingCount = parseInt(data.settings.polling_count) || 5;
-
-                    // 如果启用了自动轮询，则开始轮询（后端返回 boolean，兼容处理）
-                    const enablePolling = data.settings.enable_auto_polling === true || data.settings.enable_auto_polling === 'true';
-                    if (enablePolling && currentAccount) {
-                        startPolling();
-                    }
+                    applyPollingSettings(data.settings);
                 }
             } catch (error) {
                 console.error('初始化轮询设置失败:', error);
@@ -1504,7 +1833,7 @@ ${details}
             pollingCount++;
 
             try {
-                const response = await fetch(`/api/emails/${encodeURIComponent(currentAccount)}?skip=0&limit=10&folder=${currentFolder}`);
+                const response = await fetch(`/api/emails/${encodeURIComponent(currentAccount)}?skip=0&top=10&folder=${currentFolder}`);
                 const data = await response.json();
 
                 if (data.success && data.emails) {

@@ -244,6 +244,9 @@
                 const gradient = avatarGradients[index % avatarGradients.length];
                 const providerLabel = getProviderLabel(acc.provider || acc.account_type || 'outlook');
                 const providerTagHtml = `<span class="account-provider-tag">${escapeHtml(providerLabel)}</span>`;
+                const notificationEnabled = acc.notification_enabled !== undefined
+                    ? !!acc.notification_enabled
+                    : !!acc.telegram_push_enabled;
 
                 let tokenBadge = `<span class="badge badge-gray">– ${translateAppTextLocal('未知')}</span>`;
                 if (acc.token_status === 'valid') {
@@ -274,7 +277,7 @@
                             <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px;">
                                 ${providerTagHtml}
                                 ${(acc.tags || []).map(tag => `<span class="tag" style="background-color:${tag.color};color:white;">${escapeHtml(tag.name)}</span>`).join('')}
-                                ${acc.telegram_push_enabled ? `<span class="tag tg-push-tag" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, false)" title="${escapeHtml(translateAppTextLocal('点击关闭推送'))}">🔔 ${escapeHtml(translateAppTextLocal('推送'))}</span>` : ''}
+                                ${notificationEnabled ? `<span class="tag tg-push-tag" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, false)" title="${escapeHtml(translateAppTextLocal('点击关闭该邮箱通知参与'))}">🔔 ${escapeHtml(translateAppTextLocal('通知'))}</span>` : ''}
                             </div>
                         </div>
                     </div>
@@ -285,7 +288,7 @@
                             ${isFailed ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); showRefreshError(${acc.id}, '${escapeJs(acc.last_refresh_error || '未知错误')}', '${escapeJs(acc.email)}')" style="padding:1px 6px;font-size:0.65rem;">${escapeHtml(translateAppTextLocal('查看错误'))}</button>` : ''}
                         </div>
                         <div class="account-actions">
-                            <button class="btn-icon ${acc.telegram_push_enabled ? 'tg-push-active' : ''}" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, ${!acc.telegram_push_enabled})" title="${escapeHtml(translateAppTextLocal(acc.telegram_push_enabled ? 'Telegram 推送（已开启）' : 'Telegram 推送'))}">🔔</button>
+                            <button class="btn-icon ${notificationEnabled ? 'tg-push-active' : ''}" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, ${!notificationEnabled})" title="${escapeHtml(translateAppTextLocal(notificationEnabled ? '该邮箱通知参与（已开启）' : '开启该邮箱通知参与'))}">🔔</button>
                             <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(acc.email)}', this)" title="${escapeHtml(translateAppTextLocal('验证码'))}" style="font-size:0.72rem;padding:2px 8px;">🔑 ${escapeHtml(translateAppTextLocal('验证码'))}</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); copyEmail('${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('复制'))}">📋</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); showEditAccountModal(${acc.id})" title="${escapeHtml(translateAppTextLocal('编辑'))}">✏️</button>

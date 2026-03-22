@@ -229,8 +229,8 @@ def api_get_settings() -> Any:
     safe_settings["telegram_poll_interval"] = _coerce_int_range(
         all_settings.get("telegram_poll_interval", "600") or "600",
         600,
-        minimum=60,
-        maximum=3600,
+        minimum=10,
+        maximum=86400,
     )
 
     response = {"success": True, "settings": safe_settings}

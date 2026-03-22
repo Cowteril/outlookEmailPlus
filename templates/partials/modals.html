@@ -543,6 +543,24 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
+                    <label class="form-label">步骤 0: 输入当前系统登录密码</label>
+                    <input type="password" class="form-input" id="oauthVerifyPassword" placeholder="用于本系统二次验证，不是微软邮箱密码">
+                    <div class="form-hint">只有在返回 <code>refresh_token</code> 前才会使用这一步校验，避免敏感凭据被直接明文导出。</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">当前 OAuth 应用配置</label>
+                    <div style="display: grid; gap: 8px;">
+                        <input type="text" class="form-input" id="oauthClientIdInput" readonly
+                            style="font-size: 12px; font-family: monospace;">
+                        <input type="text" class="form-input" id="oauthRedirectUriInput" readonly
+                            style="font-size: 12px; font-family: monospace;">
+                    </div>
+                    <div class="form-hint">`client_id` 是 Azure / Microsoft OAuth 应用级配置，不是个人邮箱登录后自动生成。`refresh_token` 需要通过下面的微软授权流程换取。</div>
+                    <div class="form-hint" id="oauthRedirectUriWarning" style="display:none; color: #b45309;"></div>
+                </div>
+
+                <div class="form-group">
                     <label class="form-label">步骤 1: 访问授权链接</label>
                     <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                         <input type="text" class="form-input" id="authUrlInput" readonly
@@ -552,15 +570,15 @@
                         <button class="btn btn-primary" onclick="openAuthUrl()" style="white-space: nowrap;">🔗
                             打开</button>
                     </div>
-                    <div class="form-hint">点击"打开"按钮在浏览器中授权，或点击"复制"后手动粘贴到浏览器</div>
+                    <div class="form-hint">点击“打开”后会跳到微软授权页。授权成功时，系统会优先自动接收回跳结果；如果浏览器拦截弹窗，再手工复制回跳地址。</div>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label">步骤 2: 粘贴授权后的完整 URL</label>
                     <textarea class="form-textarea" id="redirectUrlInput"
-                        placeholder="授权成功后，浏览器会跳转到一个空白页，请复制地址栏中的完整 URL 并粘贴到这里"
+                        placeholder="如果授权窗口没有自动回填，请把浏览器回跳后的完整 URL 粘贴到这里；也支持直接粘贴 ?code=... 这一段 query"
                         style="height: 80px; font-size: 12px; font-family: monospace;"></textarea>
-                    <div class="form-hint">URL 格式类似：http://localhost:8080/?code=xxxxx&state=12345</div>
+                    <div class="form-hint">回跳 URL 必须和上面显示的 <code>redirect_uri</code> 一致，例如：<span id="oauthRedirectUriExample">http://localhost:8080/oauth/callback?code=xxxxx&state=12345</span></div>
                 </div>
 
                 <div class="form-group" id="refreshTokenResult" style="display: none;">

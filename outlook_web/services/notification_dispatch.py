@@ -84,6 +84,22 @@ def list_email_notification_sources() -> list[dict[str, Any]]:
     return [_normalize_account_source(acc) for acc in accounts] + [_normalize_temp_email_source(item) for item in temp_emails]
 
 
+def _is_account_notification_participant(account: dict[str, Any]) -> bool:
+    """账号级通知参与开关。
+
+    兼容旧模型：底层仍复用 telegram_push_enabled 存储该账号是否参与任意通知渠道。
+    """
+    return bool(account.get("telegram_push_enabled"))
+
+
+def _is_source_notification_enabled(source: dict[str, Any]) -> bool:
+    if source["source_type"] != SOURCE_ACCOUNT:
+        return True
+
+    account = source.get("account") or {}
+    return _is_account_notification_participant(account)
+
+
 def bootstrap_channel_cursors(channel: str, *, cursor_value: str | None = None) -> None:
     target_cursor = cursor_value or utc_now_iso()
     for source in list_email_notification_sources():
@@ -150,7 +166,7 @@ def _fetch_account_messages(source: dict[str, Any], since: str) -> list[dict[str
     emails: list[dict[str, Any]] = []
     for folder in ACCOUNT_INCLUDED_FOLDERS:
         try:
-            if (account.get("provider") or "outlook") == "outlook":
+            if telegram_push._should_fetch_account_via_graph(account):
                 fetched = telegram_push._fetch_new_emails_graph(account, since, folder=folder)
             else:
                 fetched = telegram_push._fetch_new_emails_imap(account, since, folder=folder)
@@ -440,12 +456,19 @@ def _is_source_notification_enabled(source: dict[str, Any]) -> bool:
     return bool(account.get("telegram_push_enabled"))
 
 
+def _is_telegram_channel_enabled(telegram_runtime: dict[str, str] | None) -> bool:
+    return telegram_runtime is not None
+
+
 def _build_active_channels_for_source(
     source: dict[str, Any],
     *,
     email_enabled: bool,
     telegram_runtime: dict[str, str] | None,
 ) -> list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]]:
+    if not _is_source_notification_enabled(source):
+        return []
+
     active_channels: list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]] = []
 
     # 先判断“这个源能否参与自动通知”，再判断“参与哪些渠道”。
@@ -459,7 +482,7 @@ def _build_active_channels_for_source(
     if email_enabled:
         active_channels.append((CHANNEL_EMAIL, send_business_email_notification, MAX_EMAIL_NOTIFICATIONS_PER_JOB))
 
-    if telegram_runtime and source["source_type"] == SOURCE_ACCOUNT:
+    if telegram_runtime is not None and source["source_type"] == SOURCE_ACCOUNT:
         active_channels.append(
             (
                 CHANNEL_TELEGRAM,
@@ -484,7 +507,7 @@ def run_notification_dispatch_job(app) -> None:
 
         email_enabled = _is_email_channel_enabled()
         telegram_runtime = _get_telegram_runtime_config()
-        if not email_enabled and not telegram_runtime:
+        if not email_enabled and not _is_telegram_channel_enabled(telegram_runtime):
             return
 
         job_start = utc_now_iso()

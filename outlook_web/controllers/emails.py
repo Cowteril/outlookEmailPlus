@@ -17,13 +17,26 @@ from outlook_web.services import email_delete as email_delete_service
 from outlook_web.services import external_api as external_api_service
 from outlook_web.services import graph as graph_service
 from outlook_web.services import imap as imap_service
-from outlook_web.services.imap_generic import get_email_detail_imap_generic, get_emails_imap_generic
+from outlook_web.services.imap_generic import get_email_detail_imap_generic_result, get_emails_imap_generic
 
 _LOGGER = logging.getLogger("outlook_web.controllers.emails")
 
 # IMAP 服务器配置
 IMAP_SERVER_OLD = "outlook.office365.com"
 IMAP_SERVER_NEW = "outlook.live.com"
+_EXTERNAL_NESTED_UPSTREAM_CODES = {"IMAP_AUTH_FAILED", "IMAP_CONNECT_FAILED", "IMAP_FOLDER_NOT_FOUND"}
+
+
+def _build_response_from_error_payload(error_payload: dict[str, Any]):
+    return build_error_response(
+        str(error_payload.get("code") or "INTERNAL_ERROR"),
+        str(error_payload.get("message") or "请求失败"),
+        message_en=str(error_payload.get("message_en") or "Request failed"),
+        err_type=str(error_payload.get("type") or "Error"),
+        status=int(error_payload.get("status") or 500),
+        details=error_payload.get("details") or "",
+        trace_id=error_payload.get("trace_id"),
+    )
 
 
 # ==================== 邮件 API ====================
@@ -252,7 +265,7 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
     _LOGGER.info("email_detail_type=%s provider=%s folder=%s", account_type, account.get("provider", "N/A"), folder)
 
     if account_type == "imap":
-        detail = get_email_detail_imap_generic(
+        detail_result = get_email_detail_imap_generic_result(
             email_addr=email_addr,
             imap_password=account.get("imap_password", "") or "",
             imap_host=account.get("imap_host", "") or "",
@@ -261,17 +274,13 @@ def api_get_email_detail(email_addr: str, message_id: str) -> Any:
             folder=folder,
             provider=account.get("provider", "_default") or "_default",
         )
-        if detail:
+        if detail_result.get("success"):
+            detail = detail_result.get("email") or {}
             _LOGGER.info("email_detail_imap_ok email=%s subject=%s", email_addr, detail.get("subject", "?")[:40])
             return jsonify({"success": True, "email": detail})
+        error_payload = detail_result.get("error") or {}
         _LOGGER.warning("email_detail_imap_failed email=%s message_id=%s", email_addr, message_id)
-        return build_error_response(
-            "EMAIL_DETAIL_FETCH_FAILED",
-            "获取邮件详情失败",
-            message_en="Failed to fetch email details",
-            status=502,
-            details=f"email={email_addr} message_id={message_id}",
-        )
+        return _build_response_from_error_payload(error_payload)
 
     method = request.args.get("method", "graph")
 
@@ -368,14 +377,17 @@ def api_extract_verification(email_addr: str) -> Any:
         )
 
         if not emails_result.get("success"):
-            error_payload = build_error_payload(
+            error_payload = emails_result.get("error") or {}
+            if isinstance(error_payload, dict) and error_payload.get("code"):
+                return _build_response_from_error_payload(error_payload)
+            return build_error_response(
                 "EMAIL_FETCH_FAILED",
                 "获取邮件失败",
-                "IMAPError",
-                500,
-                emails_result,
+                message_en="Failed to fetch email",
+                err_type="IMAPError",
+                status=500,
+                details=emails_result,
             )
-            return jsonify({"success": False, "error": error_payload}), 500
 
         emails = emails_result.get("emails") or []
         if not emails:
@@ -389,7 +401,7 @@ def api_extract_verification(email_addr: str) -> Any:
             return jsonify({"success": False, "error": error_payload}), 404
 
         latest_email = emails[0]
-        detail = get_email_detail_imap_generic(
+        detail_result = get_email_detail_imap_generic_result(
             email_addr=email_addr,
             imap_password=account.get("imap_password", "") or "",
             imap_host=account.get("imap_host", "") or "",
@@ -399,15 +411,9 @@ def api_extract_verification(email_addr: str) -> Any:
             provider=account.get("provider", "_default") or "_default",
         )
 
-        if not detail:
-            error_payload = build_error_payload(
-                "EMAIL_DETAIL_NOT_FOUND",
-                "获取邮件详情失败",
-                "NotFoundError",
-                404,
-                f"email={email_addr}",
-            )
-            return jsonify({"success": False, "error": error_payload}), 404
+        if not detail_result.get("success"):
+            return _build_response_from_error_payload(detail_result.get("error") or {})
+        detail = detail_result.get("email") or {}
 
         # 构建邮件对象用于提取（避免把 HTML 放进 body 导致 extractor 不走 HTML->text）
         email_obj = {
@@ -638,8 +644,33 @@ def _parse_external_common_args(*, default_since_minutes: int | None = None) -> 
     }
 
 
-def _external_error_response(exc: external_api_service.ExternalApiError):
-    return jsonify(external_api_service.fail(exc.code, exc.message, data=exc.data)), exc.status
+def _resolve_external_error(exc: external_api_service.ExternalApiError, *, allow_nested_upstream: bool = False) -> dict[str, Any]:
+    resolved_code = str(exc.code)
+    resolved_message = str(exc.message)
+    resolved_status = int(exc.status)
+
+    nested_error = exc.data if isinstance(exc.data, dict) else None
+    if allow_nested_upstream and isinstance(exc, external_api_service.UpstreamReadFailedError) and nested_error:
+        nested_code = str(nested_error.get("code") or "").strip().upper()
+        if nested_code in _EXTERNAL_NESTED_UPSTREAM_CODES:
+            resolved_code = nested_code
+            resolved_message = str(nested_error.get("message") or exc.message)
+            try:
+                resolved_status = int(nested_error.get("status") or exc.status)
+            except Exception:
+                resolved_status = int(exc.status)
+
+    return {
+        "code": resolved_code,
+        "message": resolved_message,
+        "status": resolved_status,
+        "data": exc.data,
+    }
+
+
+def _external_error_response(exc: external_api_service.ExternalApiError, *, allow_nested_upstream: bool = False):
+    resolved = _resolve_external_error(exc, allow_nested_upstream=allow_nested_upstream)
+    return jsonify(external_api_service.fail(resolved["code"], resolved["message"], data=resolved["data"])), resolved["status"]
 
 
 @api_key_required
@@ -748,14 +779,15 @@ def api_external_get_message_detail(message_id: str) -> Any:
         )
         return jsonify(external_api_service.ok(detail))
     except external_api_service.ExternalApiError as exc:
+        resolved = _resolve_external_error(exc, allow_nested_upstream=True)
         external_api_service.audit_external_api_access(
             action="external_api_access",
             email_addr=(request.args.get("email") or "").strip(),
             endpoint="/api/external/messages/{message_id}",
             status="error",
-            details={"code": exc.code},
+            details={"code": resolved["code"]},
         )
-        return _external_error_response(exc)
+        return _external_error_response(exc, allow_nested_upstream=True)
     except Exception as exc:
         external_api_service.audit_external_api_access(
             action="external_api_access",
@@ -795,14 +827,15 @@ def api_external_get_message_raw(message_id: str) -> Any:
             )
         )
     except external_api_service.ExternalApiError as exc:
+        resolved = _resolve_external_error(exc, allow_nested_upstream=True)
         external_api_service.audit_external_api_access(
             action="external_api_access",
             email_addr=(request.args.get("email") or "").strip(),
             endpoint="/api/external/messages/{message_id}/raw",
             status="error",
-            details={"code": exc.code},
+            details={"code": resolved["code"]},
         )
-        return _external_error_response(exc)
+        return _external_error_response(exc, allow_nested_upstream=True)
     except Exception as exc:
         external_api_service.audit_external_api_access(
             action="external_api_access",
