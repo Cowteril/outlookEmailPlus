@@ -2,7 +2,7 @@ import json
 import unittest
 import uuid
 
-from tests._import_app import clear_login_attempts, import_web_app_module
+from tests._import_app import import_web_app_module
 
 
 class PoolFlowSuiteTests(unittest.TestCase):
@@ -17,31 +17,14 @@ class PoolFlowSuiteTests(unittest.TestCase):
 
     def setUp(self):
         with self.app.app_context():
-            clear_login_attempts()
-            from outlook_web.db import get_db
             from outlook_web.repositories import settings as settings_repo
 
-            db = get_db()
-            db.execute("DELETE FROM external_api_keys")
-            db.execute("DELETE FROM external_api_consumer_usage_daily")
-            db.execute("DELETE FROM audit_logs WHERE resource_type = 'external_api'")
-            db.execute(
-                "DELETE FROM account_claim_logs WHERE account_id IN (SELECT id FROM accounts WHERE email LIKE '%@poolflow.test')"
-            )
-            db.execute("DELETE FROM accounts WHERE email LIKE '%@poolflow.test'")
-            db.commit()
-            settings_repo.set_setting("external_api_key", "suite-key")
+            settings_repo.set_setting("external_api_key", "abc123")
             settings_repo.set_setting("pool_external_enabled", "true")
-            settings_repo.set_setting("external_api_public_mode", "false")
-            settings_repo.set_setting("external_api_ip_whitelist", "[]")
-            settings_repo.set_setting("external_api_disable_pool_claim_random", "false")
-            settings_repo.set_setting("external_api_disable_pool_claim_release", "false")
-            settings_repo.set_setting("external_api_disable_pool_claim_complete", "false")
-            settings_repo.set_setting("external_api_disable_pool_stats", "false")
 
     @staticmethod
     def _auth_headers():
-        return {"X-API-Key": "suite-key"}
+        return {"X-API-Key": "abc123"}
 
     def _make_pool_account(self, *, provider: str = "outlook", pool_status: str = "available") -> dict:
         conn = self.create_conn()

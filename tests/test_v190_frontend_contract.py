@@ -275,6 +275,27 @@ class V190FrontendContractTests(unittest.TestCase):
         self.assertIn("window.addEventListener('resize', scheduleAccountPanelDensitySync, { passive: true });", main_js)
         self.assertIn("if (page === 'mailbox') {", main_js)
 
+    def test_external_pool_settings_are_exposed_in_settings_page_and_saved_by_frontend(self):
+        client = self.app.test_client()
+        self._login(client)
+        main_js = self._get_text(client, "/static/js/main.js")
+        index_html = self._get_text(client, "/")
+
+        self.assertIn("const poolExternalEnabledEl = document.getElementById('poolExternalEnabled');", main_js)
+        self.assertIn("data.settings.pool_external_enabled === true", main_js)
+        self.assertIn("settings.pool_external_enabled = poolExternalEnabledEl.checked", main_js)
+        self.assertIn("settings.external_api_disable_pool_claim_random = disablePoolClaimRandomEl.checked", main_js)
+        self.assertIn("settings.external_api_disable_pool_claim_release = disablePoolClaimReleaseEl.checked", main_js)
+        self.assertIn("settings.external_api_disable_pool_claim_complete = disablePoolClaimCompleteEl.checked", main_js)
+        self.assertIn("settings.external_api_disable_pool_stats = disablePoolStatsEl.checked", main_js)
+        self.assertIn('id="poolExternalEnabled"', index_html)
+        self.assertIn('id="externalApiDisablePoolClaimRandom"', index_html)
+        self.assertIn('id="externalApiDisablePoolClaimRelease"', index_html)
+        self.assertIn('id="externalApiDisablePoolClaimComplete"', index_html)
+        self.assertIn('id="externalApiDisablePoolStats"', index_html)
+        self.assertIn("启用 external pool 端点", index_html)
+        self.assertIn("仅设置对外 API Key 不会自动开启邮箱池对外接口", index_html)
+
     def test_account_edit_uses_conditional_outlook_credential_validation(self):
         client = self.app.test_client()
         accounts_js = self._get_text(client, "/static/js/features/accounts.js")

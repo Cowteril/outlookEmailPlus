@@ -790,5 +790,149 @@ class PoolServiceTests(unittest.TestCase):
         self.assertEqual(ctx.exception.error_code, "token_mismatch")
 
 
+class PoolApiTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.module = import_web_app_module()
+        cls.app = cls.module.app
+        cls.client = cls.app.test_client()
+        from outlook_web.db import create_sqlite_connection
+
+        cls.create_conn = staticmethod(lambda: create_sqlite_connection())
+
+    def setUp(self):
+        with self.app.app_context():
+            from outlook_web.repositories import settings as settings_repo
+
+            settings_repo.set_setting("external_api_key", "abc123")
+            settings_repo.set_setting("pool_external_enabled", "true")
+
+    @staticmethod
+    def _auth_headers():
+        return {"X-API-Key": "abc123"}
+
+    def _make_account(self):
+        import secrets
+
+        conn = self.create_conn()
+        try:
+            email = f"api_test_{secrets.token_hex(4)}@example.com"
+            conn.execute(
+                """
+                INSERT INTO accounts (email, client_id, refresh_token, status, pool_status)
+                VALUES (?, 'test_client', 'test_token', 'active', 'available')
+                """,
+                (email,),
+            )
+            conn.commit()
+            row = conn.execute("SELECT id FROM accounts WHERE email = ?", (email,)).fetchone()
+            return row["id"]
+        finally:
+            conn.close()
+
+    def test_stats_endpoint(self):
+        resp = self.client.get("/api/external/pool/stats", headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data["success"])
+        self.assertIn("data", data)
+        self.assertIn("pool_counts", data["data"])
+        self.assertIn("available", data["data"]["pool_counts"])
+
+    def test_claim_random_endpoint(self):
+        self._make_account()
+        resp = self.client.post(
+            "/api/external/pool/claim-random",
+            headers=self._auth_headers(),
+            json={
+                "caller_id": "test_bot",
+                "task_id": "api_task_1",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data["success"])
+        self.assertIn("data", data)
+        self.assertIn("account_id", data["data"])
+        self.assertIn("email", data["data"])
+        self.assertIn("claim_token", data["data"])
+        self.assertIn("lease_expires_at", data["data"])
+
+    def test_claim_random_missing_caller_id(self):
+        resp = self.client.post(
+            "/api/external/pool/claim-random",
+            headers=self._auth_headers(),
+            json={"task_id": "api_task_2"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertFalse(data["success"])
+        self.assertEqual(data["code"], "CALLER_ID_EMPTY")
+
+    def test_claim_complete_flow(self):
+        self._make_account()
+        claim_resp = self.client.post(
+            "/api/external/pool/claim-random",
+            headers=self._auth_headers(),
+            json={"caller_id": "test_bot", "task_id": "flow_task"},
+        )
+        self.assertEqual(claim_resp.status_code, 200)
+        claim_data = json.loads(claim_resp.data)
+        account_data = claim_data["data"]
+
+        complete_resp = self.client.post(
+            "/api/external/pool/claim-complete",
+            headers=self._auth_headers(),
+            json={
+                "account_id": account_data["account_id"],
+                "claim_token": account_data["claim_token"],
+                "caller_id": "test_bot",
+                "task_id": "flow_task",
+                "result": "success",
+                "detail": "test ok",
+            },
+        )
+        self.assertEqual(complete_resp.status_code, 200)
+        complete_data = json.loads(complete_resp.data)
+        self.assertTrue(complete_data["success"])
+        self.assertEqual(complete_data["data"]["account_id"], account_data["account_id"])
+        self.assertEqual(complete_data["data"]["pool_status"], "used")
+
+    def test_claim_release_flow(self):
+        self._make_account()
+        claim_resp = self.client.post(
+            "/api/external/pool/claim-random",
+            headers=self._auth_headers(),
+            json={"caller_id": "test_bot", "task_id": "rel_task"},
+        )
+        self.assertEqual(claim_resp.status_code, 200)
+        claim_data = json.loads(claim_resp.data)
+        account_data = claim_data["data"]
+
+        release_resp = self.client.post(
+            "/api/external/pool/claim-release",
+            headers=self._auth_headers(),
+            json={
+                "account_id": account_data["account_id"],
+                "claim_token": account_data["claim_token"],
+                "caller_id": "test_bot",
+                "task_id": "rel_task",
+                "reason": "test cancel",
+            },
+        )
+        self.assertEqual(release_resp.status_code, 200)
+        data = json.loads(release_resp.data)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["data"]["account_id"], account_data["account_id"])
+        self.assertEqual(data["data"]["pool_status"], "available")
+
+    def test_legacy_internal_pool_routes_are_not_registered(self):
+        resp = self.client.post(
+            "/api/pool/claim-random",
+            json={"caller_id": "test_bot", "task_id": "legacy_route"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
