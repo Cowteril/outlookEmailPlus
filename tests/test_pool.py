@@ -802,10 +802,22 @@ class PoolApiTests(unittest.TestCase):
 
     def setUp(self):
         with self.app.app_context():
+            from outlook_web.db import get_db
             from outlook_web.repositories import settings as settings_repo
 
+            db = get_db()
+            db.execute("DELETE FROM external_api_keys")
+            db.execute("DELETE FROM external_api_rate_limits")
+            db.commit()
             settings_repo.set_setting("external_api_key", "abc123")
             settings_repo.set_setting("pool_external_enabled", "true")
+            settings_repo.set_setting("external_api_public_mode", "false")
+            settings_repo.set_setting("external_api_ip_whitelist", "[]")
+            settings_repo.set_setting("external_api_rate_limit_per_minute", "60")
+            settings_repo.set_setting("external_api_disable_pool_claim_random", "false")
+            settings_repo.set_setting("external_api_disable_pool_claim_release", "false")
+            settings_repo.set_setting("external_api_disable_pool_claim_complete", "false")
+            settings_repo.set_setting("external_api_disable_pool_stats", "false")
 
     @staticmethod
     def _auth_headers():
