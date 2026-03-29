@@ -39,8 +39,8 @@ data/
 opencode.json
 verification.md
 
-# 本地文档（默认不推送）
-docs/
+# 本地文档（docs/ 已纳入版本管理）
+# docs/
 
 # 内部文档（不开源）
 PRD/
