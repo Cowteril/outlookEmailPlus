@@ -326,8 +326,12 @@
                             <button class="btn btn-sm btn-primary" onclick="generateTempEmail()">+ 创建</button>
                         </div>
                         <div style="padding:12px;border-bottom:1px solid var(--border-light);display:flex;flex-direction:column;gap:8px;">
+                            <select class="form-input" id="tempEmailProviderSelect" onchange="onTempEmailProviderChange(this.value)" title="选择创建邮箱的 Provider">
+                                <option value="legacy_bridge">🔧 GPTMail (Legacy Bridge)</option>
+                                <option value="cloudflare_temp_mail">☁ Cloudflare Temp Mail</option>
+                            </select>
                             <input type="text" class="form-input" id="tempEmailPrefixInput" placeholder="前缀（可选）" maxlength="64">
-                            <select class="form-input" id="tempEmailDomainSelect">
+                            <select class="form-input" id="tempEmailDomainSelect" disabled>
                                 <option value="">自动分配域名</option>
                             </select>
                             <div id="tempEmailOptionsHint" class="form-hint" style="margin:0;">支持自定义前缀和多域名创建。</div>
@@ -409,9 +413,12 @@
                         <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
                             <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">⚡ 临时邮箱配置</h4>
                             <div class="form-group">
-                                <label class="form-label">临时邮箱 Provider</label>
-                                <input type="text" class="form-input" id="settingsTempMailProvider" placeholder="custom_domain_temp_mail">
-                                <div class="form-hint">当前正式能力字段，默认使用 `custom_domain_temp_mail`。</div>
+                                <label class="form-label">全局临时邮箱 Provider</label>
+                                <select class="form-input" id="settingsTempMailProvider">
+                                    <option value="legacy_bridge">🔧 GPTMail (Legacy Bridge)</option>
+                                    <option value="cloudflare_temp_mail">☁ Cloudflare Temp Mail</option>
+                                </select>
+                                <div class="form-hint">决定 external API 和其他未明确指定 provider 的操作所使用的来源。生成邮箱时可在前端独立选择。</div>
                             </div>
                             <div class="form-group">
                                 <label class="form-label">临时邮箱 API Base URL</label>
@@ -442,6 +449,21 @@
   "max_length": 32,
   "pattern": "^[a-z0-9][a-z0-9._-]*$"
 }' style="font-family: monospace; font-size: 0.84rem;"></textarea>
+                            </div>
+                        </div>
+                        <!-- CF Worker 独立配置区 -->
+                        <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
+                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text);">☁ Cloudflare Temp Email Worker 配置</h4>
+                            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">与 GPTMail 完全独立的配置。部署 dreamhunter2333/cloudflare_temp_email 后填写。</p>
+                            <div class="form-group">
+                                <label class="form-label">CF Worker 部署地址</label>
+                                <input type="text" class="form-input" id="settingsCfWorkerBaseUrl" placeholder="https://mail.yourname.workers.dev">
+                                <div class="form-hint">Cloudflare Worker 的部署 URL，不含尾部斜杠。</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">CF Worker Admin 密码</label>
+                                <input type="password" class="form-input" id="settingsCfWorkerAdminKey" placeholder="CF Worker 的 ADMIN_PASSWORDS 值" autocomplete="off">
+                                <div class="form-hint">对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。</div>
                             </div>
                         </div>
                         <div class="form-group">

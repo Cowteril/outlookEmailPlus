@@ -101,7 +101,15 @@
             const container = document.getElementById('accountList');
             const pageContainer = document.getElementById('tempEmailContainer');
 
-            loadTempEmailOptions(forceRefresh);
+            // 初始化 provider 联动状态（与当前下拉框选中值保持同步）
+            const providerSelect = document.getElementById('tempEmailProviderSelect');
+            if (providerSelect) {
+                onTempEmailProviderChange(providerSelect.value);
+            }
+
+            if (providerSelect && providerSelect.value === 'cloudflare_temp_mail') {
+                loadTempEmailOptions(forceRefresh);
+            }
 
             if (!forceRefresh && accountsCache['temp']) {
                 renderTempEmailList(accountsCache['temp']);
@@ -188,16 +196,40 @@
         }
 
         // 生成临时邮箱
+        // Provider 下拉框切换回调
+        // - cloudflare_temp_mail：启用域名下拉，加载 CF 配置的域名列表
+        // - legacy_bridge：禁用域名下拉（GPTMail 自动分配域名，不支持手动选择）
+        function onTempEmailProviderChange(selectedProvider) {
+            const domainSelect = document.getElementById('tempEmailDomainSelect');
+            if (!domainSelect) return;
+            if (selectedProvider === 'cloudflare_temp_mail') {
+                // CF：启用域名选择，重新加载 settings 中配置的域名
+                domainSelect.disabled = false;
+                loadTempEmailOptions(true);
+            } else {
+                // GPTMail (legacy_bridge)：禁用域名选择，自动分配
+                domainSelect.disabled = true;
+                domainSelect.innerHTML = '<option value="">自动分配域名</option>';
+                domainSelect.value = '';
+                const hint = document.getElementById('tempEmailOptionsHint');
+                if (hint) hint.textContent = translateAppTextLocal('GPTMail 自动分配域名，无需手动选择。');
+            }
+        }
+
         async function generateTempEmail() {
             try {
                 const prefixInput = document.getElementById('tempEmailPrefixInput');
                 const domainSelect = document.getElementById('tempEmailDomainSelect');
+                const providerSelect = document.getElementById('tempEmailProviderSelect');
                 const payload = {};
                 if (prefixInput && prefixInput.value.trim()) {
                     payload.prefix = prefixInput.value.trim();
                 }
-                if (domainSelect && domainSelect.value.trim()) {
+                if (domainSelect && domainSelect.value.trim() && !domainSelect.disabled) {
                     payload.domain = domainSelect.value.trim();
+                }
+                if (providerSelect && providerSelect.value.trim()) {
+                    payload.provider_name = providerSelect.value.trim();
                 }
                 showToast('正在生成临时邮箱…', 'info');
                 const response = await fetch('/api/temp-emails/generate', {
@@ -472,9 +504,9 @@
             }
             container.innerHTML = emails.map((email, index) => {
                 const subject = email.subject || translateAppTextLocal('无主题');
-                const from = email.from || email.sender || translateAppTextLocal('未知发件人');
-                const date = email.receivedDateTime || email.date || '';
-                const preview = (email.bodyPreview || email.body_preview || '').substring(0, 80);
+                const from = email.from || translateAppTextLocal('未知发件人');
+                const date = email.date || '';
+                const preview = (email.body_preview || '').substring(0, 80);
                 return `
                     <div class="email-item ${index === 0 ? '' : ''}" onclick="getTempEmailDetail('${escapeJs(email.id || email.message_id || '')}', ${index})">
                         <div class="email-subject">${escapeHtml(subject)}</div>

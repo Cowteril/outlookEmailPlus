@@ -80,8 +80,11 @@ def api_generate_temp_email() -> Any:
     data = request.json or {}
     prefix = data.get("prefix")
     domain = data.get("domain")
+    provider_name = str(data.get("provider_name") or "").strip() or None
     try:
-        mailbox = temp_mail_service.generate_user_mailbox(prefix=prefix, domain=domain)
+        mailbox = temp_mail_service.generate_user_mailbox(
+            prefix=prefix, domain=domain, provider_name=provider_name
+        )
         email_addr = mailbox["email"]
         log_audit("create", "temp_email", email_addr, "生成临时邮箱")
         logger.info(f"临时邮箱生成成功: {email_addr}")

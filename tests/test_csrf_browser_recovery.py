@@ -128,6 +128,17 @@ class CsrfBrowserRecoveryTests(unittest.TestCase):
         cls.app = cls.module.app
         cls._original_csrf_enabled = cls.app.config.get("WTF_CSRF_ENABLED")
         cls._original_csrf_check_default = cls.app.config.get("WTF_CSRF_CHECK_DEFAULT")
+        cls._server = None
+        cls._playwright = None
+        cls._browser = None
+
+        # 先检查 Playwright 是否真正可用（二进制存在），再修改全局 CSRF 配置
+        try:
+            _pw = sync_playwright().start()
+        except Exception as exc:
+            raise unittest.SkipTest(f"playwright is unavailable: {exc}")
+
+        # Playwright 可用，现在才开启 CSRF（确保 tearDownClass 能被调用来还原）
         cls.app.config.update(
             TESTING=True,
             WTF_CSRF_ENABLED=True,
@@ -137,13 +148,17 @@ class CsrfBrowserRecoveryTests(unittest.TestCase):
         cls._server = _LiveServerThread(cls.app)
         cls._server.start()
         cls.base_url = f"http://127.0.0.1:{cls._server.port}"
-        cls._playwright = sync_playwright().start()
+        cls._playwright = _pw
         try:
-            cls._browser = cls._playwright.chromium.launch(headless=True)
+            cls._browser = _pw.chromium.launch(headless=True)
         except Exception as exc:
-            cls._playwright.stop()
+            _pw.stop()
             cls._server.shutdown()
             cls._server.join(timeout=5)
+            cls.app.config.update(
+                WTF_CSRF_ENABLED=cls._original_csrf_enabled,
+                WTF_CSRF_CHECK_DEFAULT=cls._original_csrf_check_default,
+            )
             raise unittest.SkipTest(f"playwright chromium is unavailable: {exc}")
 
     @classmethod

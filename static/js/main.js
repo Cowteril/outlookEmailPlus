@@ -1695,7 +1695,12 @@ ${details}
 
                     const tempMailProviderEl = document.getElementById('settingsTempMailProvider');
                     if (tempMailProviderEl) {
-                        tempMailProviderEl.value = data.settings.temp_mail_provider || 'custom_domain_temp_mail';
+                        // 兼容旧值（custom_domain_temp_mail → legacy_bridge）
+                        const rawProvider = data.settings.temp_mail_provider || 'legacy_bridge';
+                        const mappedProvider = (rawProvider === 'custom_domain_temp_mail' || rawProvider === 'legacy_bridge' || rawProvider === 'legacy_gptmail' || rawProvider === 'gptmail')
+                            ? 'legacy_bridge'
+                            : rawProvider;
+                        tempMailProviderEl.value = mappedProvider;
                     }
 
                     const tempMailApiBaseUrlEl = document.getElementById('settingsTempMailApiBaseUrl');
@@ -1729,7 +1734,19 @@ ${details}
                         tempMailPrefixRulesEl.value = Object.keys(prefixRules).length ? JSON.stringify(prefixRules, null, 2) : '';
                     }
 
-                    // 对外开放 API Key（仅脱敏展示，避免回填明文）
+                    // CF Worker 独立配置
+                    const cfWorkerBaseUrlEl = document.getElementById('settingsCfWorkerBaseUrl');
+                    if (cfWorkerBaseUrlEl) {
+                        cfWorkerBaseUrlEl.value = data.settings.cf_worker_base_url || '';
+                    }
+
+                    const cfWorkerAdminKeyEl = document.getElementById('settingsCfWorkerAdminKey');
+                    if (cfWorkerAdminKeyEl) {
+                        const cfMasked = data.settings.cf_worker_admin_key_masked || '';
+                        cfWorkerAdminKeyEl.value = cfMasked;
+                        cfWorkerAdminKeyEl.dataset.maskedValue = cfMasked;
+                        cfWorkerAdminKeyEl.dataset.isSet = data.settings.cf_worker_admin_key_set ? 'true' : 'false';
+                    }
                     const externalApiKeyEl = document.getElementById('settingsExternalApiKey');
                     if (externalApiKeyEl) {
                         const maskedValue = data.settings.external_api_key_masked || '';
@@ -1922,7 +1939,7 @@ ${details}
                 settings.login_password = password;
             }
 
-            settings.temp_mail_provider = tempMailProviderEl ? tempMailProviderEl.value.trim() || 'custom_domain_temp_mail' : 'custom_domain_temp_mail';
+            settings.temp_mail_provider = tempMailProviderEl ? (tempMailProviderEl.value.trim() || 'legacy_bridge') : 'legacy_bridge';
             settings.temp_mail_api_base_url = tempMailApiBaseUrlEl ? tempMailApiBaseUrlEl.value.trim() : '';
             settings.temp_mail_default_domain = tempMailDefaultDomainEl ? tempMailDefaultDomainEl.value.trim() : '';
 
@@ -1961,6 +1978,22 @@ ${details}
             // 临时邮箱 API Key：仅当用户真实输入时才覆盖（避免把脱敏占位符写回 DB）
             if (!(tempMailApiKeyIsSet && tempMailApiKey && tempMailApiKey === tempMailApiKeyMasked)) {
                 settings.temp_mail_api_key = tempMailApiKey;
+            }
+
+            // CF Worker 独立配置
+            const cfWorkerBaseUrlEl = document.getElementById('settingsCfWorkerBaseUrl');
+            const cfWorkerAdminKeyEl = document.getElementById('settingsCfWorkerAdminKey');
+            if (cfWorkerBaseUrlEl) {
+                settings.cf_worker_base_url = cfWorkerBaseUrlEl.value.trim();
+            }
+            if (cfWorkerAdminKeyEl) {
+                const cfKey = cfWorkerAdminKeyEl.value.trim();
+                const cfKeyMasked = cfWorkerAdminKeyEl.dataset.maskedValue || '';
+                const cfKeyIsSet = cfWorkerAdminKeyEl.dataset.isSet === 'true';
+                // 仅当用户真实输入时才覆盖（避免把脱敏占位符写回 DB）
+                if (!(cfKeyIsSet && cfKey && cfKey === cfKeyMasked)) {
+                    settings.cf_worker_admin_key = cfKey;
+                }
             }
 
             // 对外开放 API Key：允许清空（空字符串）

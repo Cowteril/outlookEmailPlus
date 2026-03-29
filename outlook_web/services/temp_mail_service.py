@@ -247,9 +247,22 @@ class TempMailService:
         return options
 
     def _validate_prefix_and_domain(
-        self, prefix: str | None, domain: str | None
+        self,
+        prefix: str | None,
+        domain: str | None,
+        *,
+        provider_name: str | None = None,
     ) -> tuple[str | None, str | None]:
-        options = self.get_options()
+        if provider_name:
+            # 指定了特定 provider：使用该 provider 的域名配置进行校验
+            target_provider = self._get_provider(
+                provider_name=provider_name, purpose="options"
+            )
+            options = target_provider.get_options()
+            options.setdefault("provider_name", str(options.get("provider") or ""))
+            options.setdefault("provider_label", "temp_mail")
+        else:
+            options = self.get_options()
         normalized_prefix = str(prefix or "").strip() or None
         normalized_domain = str(domain or "").strip() or None
 
@@ -306,12 +319,18 @@ class TempMailService:
         return True
 
     def generate_user_mailbox(
-        self, *, prefix: str | None = None, domain: str | None = None
+        self,
+        *,
+        prefix: str | None = None,
+        domain: str | None = None,
+        provider_name: str | None = None,
     ) -> dict[str, Any]:
+        # 标准化 provider_name（空字符串视为未指定，回退到全局设置）
+        normalized_pn = str(provider_name or "").strip() or None
         normalized_prefix, normalized_domain = self._validate_prefix_and_domain(
-            prefix, domain
+            prefix, domain, provider_name=normalized_pn
         )
-        provider = self._get_provider(purpose="runtime")
+        provider = self._get_provider(provider_name=normalized_pn, purpose="runtime")
         result = self._create_mailbox(
             provider, prefix=normalized_prefix, domain=normalized_domain
         )

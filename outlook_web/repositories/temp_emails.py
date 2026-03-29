@@ -57,7 +57,9 @@ def _score_temp_email_payload(payload: Any) -> int:
         return 0
 
     score = 0
-    if str(payload_dict.get("html_content") or payload_dict.get("body_html") or "").strip():
+    if str(
+        payload_dict.get("html_content") or payload_dict.get("body_html") or ""
+    ).strip():
         score += 20
     for key in _TEMP_EMAIL_RICH_KEYS:
         value = payload_dict.get(key)
@@ -69,7 +71,9 @@ def _score_temp_email_payload(payload: Any) -> int:
     return score
 
 
-def _choose_richer_temp_email_payload(existing_payload: Any, incoming_payload: Any) -> str:
+def _choose_richer_temp_email_payload(
+    existing_payload: Any, incoming_payload: Any
+) -> str:
     existing_score = _score_temp_email_payload(existing_payload)
     incoming_score = _score_temp_email_payload(incoming_payload)
     if incoming_score >= existing_score:
@@ -86,7 +90,9 @@ def _default_provider_name_for_source(source: str | None) -> str:
     return DEFAULT_TEMP_MAIL_PROVIDER_NAME
 
 
-def deserialize_temp_email_meta(raw_meta: Any, *, source: str | None = None) -> Dict[str, Any]:
+def deserialize_temp_email_meta(
+    raw_meta: Any, *, source: str | None = None
+) -> Dict[str, Any]:
     if isinstance(raw_meta, dict):
         meta = dict(raw_meta)
     elif isinstance(raw_meta, str) and raw_meta.strip():
@@ -106,7 +112,9 @@ def deserialize_temp_email_meta(raw_meta: Any, *, source: str | None = None) -> 
     if not isinstance(provider_debug, dict):
         provider_debug = {}
 
-    if str(source or "").strip().lower() == LEGACY_TEMP_MAIL_SOURCE and not provider_debug.get("bridge"):
+    if str(
+        source or ""
+    ).strip().lower() == LEGACY_TEMP_MAIL_SOURCE and not provider_debug.get("bridge"):
         provider_debug["bridge"] = "gptmail"
 
     provider_labels = meta.get("provider_labels")
@@ -114,15 +122,31 @@ def deserialize_temp_email_meta(raw_meta: Any, *, source: str | None = None) -> 
         provider_labels = []
 
     normalized = {
-        "provider_name": str(meta.get("provider_name") or _default_provider_name_for_source(source)).strip()
+        "provider_name": str(
+            meta.get("provider_name") or _default_provider_name_for_source(source)
+        ).strip()
         or _default_provider_name_for_source(source),
         "provider_mailbox_id": str(meta.get("provider_mailbox_id") or "").strip(),
         "provider_cursor": str(meta.get("provider_cursor") or "").strip(),
-        "provider_labels": [str(item).strip() for item in provider_labels if str(item or "").strip()],
+        "provider_labels": [
+            str(item).strip() for item in provider_labels if str(item or "").strip()
+        ],
         "provider_capabilities": {
-            "delete_mailbox": bool(provider_capabilities.get("delete_mailbox", DEFAULT_PROVIDER_CAPABILITIES["delete_mailbox"])),
-            "delete_message": bool(provider_capabilities.get("delete_message", DEFAULT_PROVIDER_CAPABILITIES["delete_message"])),
-            "clear_messages": bool(provider_capabilities.get("clear_messages", DEFAULT_PROVIDER_CAPABILITIES["clear_messages"])),
+            "delete_mailbox": bool(
+                provider_capabilities.get(
+                    "delete_mailbox", DEFAULT_PROVIDER_CAPABILITIES["delete_mailbox"]
+                )
+            ),
+            "delete_message": bool(
+                provider_capabilities.get(
+                    "delete_message", DEFAULT_PROVIDER_CAPABILITIES["delete_message"]
+                )
+            ),
+            "clear_messages": bool(
+                provider_capabilities.get(
+                    "clear_messages", DEFAULT_PROVIDER_CAPABILITIES["clear_messages"]
+                )
+            ),
         },
         "provider_debug": provider_debug,
     }
@@ -147,23 +171,42 @@ def _serialize_temp_email_row(row: Any) -> Dict[str, Any]:
         return {}
     item = dict(row)
     item["visible_in_ui"] = bool(item.get("visible_in_ui", 0))
-    item["created_by"] = "task" if str(item.get("mailbox_type") or "").strip().lower() == "task" else "user"
-    item["meta_json"] = deserialize_temp_email_meta(item.get("meta_json"), source=item.get("source"))
-    item["provider_name"] = str(item["meta_json"].get("provider_name") or _default_provider_name_for_source(item.get("source")))
+    item["created_by"] = (
+        "task"
+        if str(item.get("mailbox_type") or "").strip().lower() == "task"
+        else "user"
+    )
+    item["meta_json"] = deserialize_temp_email_meta(
+        item.get("meta_json"), source=item.get("source")
+    )
+    item["provider_name"] = str(
+        item["meta_json"].get("provider_name")
+        or _default_provider_name_for_source(item.get("source"))
+    )
     return item
 
 
 def build_temp_mailbox_descriptor(record: Dict[str, Any]) -> Dict[str, Any]:
     normalized = _serialize_temp_email_row(record)
     email_addr = str(normalized.get("email") or "").strip()
-    prefix = str(normalized.get("prefix") or (email_addr.split("@", 1)[0] if "@" in email_addr else "")).strip()
-    domain = str(normalized.get("domain") or (email_addr.split("@", 1)[1] if "@" in email_addr else "")).strip()
+    prefix = str(
+        normalized.get("prefix")
+        or (email_addr.split("@", 1)[0] if "@" in email_addr else "")
+    ).strip()
+    domain = str(
+        normalized.get("domain")
+        or (email_addr.split("@", 1)[1] if "@" in email_addr else "")
+    ).strip()
     return {
         "kind": TEMP_MAIL_KIND,
         "email": email_addr,
         "source": str(normalized.get("source") or DEFAULT_TEMP_MAIL_SOURCE),
-        "provider_name": str(normalized.get("provider_name") or _default_provider_name_for_source(normalized.get("source"))),
-        "mailbox_type": str(normalized.get("mailbox_type") or "user").strip().lower() or "user",
+        "provider_name": str(
+            normalized.get("provider_name")
+            or _default_provider_name_for_source(normalized.get("source"))
+        ),
+        "mailbox_type": str(normalized.get("mailbox_type") or "user").strip().lower()
+        or "user",
         "visible_in_ui": bool(normalized.get("visible_in_ui")),
         "status": str(normalized.get("status") or "active").strip().lower() or "active",
         "prefix": prefix,
@@ -233,7 +276,9 @@ def load_temp_emails(
     return serialized
 
 
-def get_temp_email_by_address(email_addr: str, *, view: str = "record") -> Optional[Dict]:
+def get_temp_email_by_address(
+    email_addr: str, *, view: str = "record"
+) -> Optional[Dict]:
     """根据邮箱地址获取临时邮箱"""
     db = get_db()
     cursor = db.execute("SELECT * FROM temp_emails WHERE email = ?", (email_addr,))
@@ -248,7 +293,9 @@ def get_temp_email_by_address(email_addr: str, *, view: str = "record") -> Optio
     return serialized
 
 
-def get_temp_email_by_task_token(task_token: str, *, view: str = "record") -> Optional[Dict]:
+def get_temp_email_by_task_token(
+    task_token: str, *, view: str = "record"
+) -> Optional[Dict]:
     db = get_db()
     cursor = db.execute("SELECT * FROM temp_emails WHERE task_token = ?", (task_token,))
     row = cursor.fetchone()
@@ -282,18 +329,34 @@ def create_temp_email(
     """创建临时邮箱记录。"""
     db = get_db()
     normalized_email = str(email_addr or "").strip()
-    normalized_prefix = prefix if prefix is not None else (normalized_email.split("@", 1)[0] if "@" in normalized_email else None)
-    normalized_domain = domain if domain is not None else (normalized_email.split("@", 1)[1] if "@" in normalized_email else None)
-    normalized_source = str(source or DEFAULT_TEMP_MAIL_SOURCE).strip() or DEFAULT_TEMP_MAIL_SOURCE
+    normalized_prefix = (
+        prefix
+        if prefix is not None
+        else (normalized_email.split("@", 1)[0] if "@" in normalized_email else None)
+    )
+    normalized_domain = (
+        domain
+        if domain is not None
+        else (normalized_email.split("@", 1)[1] if "@" in normalized_email else None)
+    )
+    normalized_source = (
+        str(source or DEFAULT_TEMP_MAIL_SOURCE).strip() or DEFAULT_TEMP_MAIL_SOURCE
+    )
     normalized_meta_source = meta if meta is not None else meta_json
     normalized_meta_json = serialize_temp_email_meta(
         normalized_meta_source,
         source=normalized_source,
     )
     if provider_name:
-        normalized_meta = deserialize_temp_email_meta(normalized_meta_json, source=normalized_source)
-        normalized_meta["provider_name"] = str(provider_name).strip() or _default_provider_name_for_source(normalized_source)
-        normalized_meta_json = serialize_temp_email_meta(normalized_meta, source=normalized_source)
+        normalized_meta = deserialize_temp_email_meta(
+            normalized_meta_json, source=normalized_source
+        )
+        normalized_meta["provider_name"] = str(
+            provider_name
+        ).strip() or _default_provider_name_for_source(normalized_source)
+        normalized_meta_json = serialize_temp_email_meta(
+            normalized_meta, source=normalized_source
+        )
     try:
         db.execute(
             """
@@ -347,7 +410,9 @@ def delete_temp_email(email_addr: str) -> bool:
     """删除临时邮箱及其所有邮件"""
     db = get_db()
     try:
-        db.execute("DELETE FROM temp_email_messages WHERE email_address = ?", (email_addr,))
+        db.execute(
+            "DELETE FROM temp_email_messages WHERE email_address = ?", (email_addr,)
+        )
         db.execute("DELETE FROM temp_emails WHERE email = ?", (email_addr,))
         db.commit()
         return True
@@ -368,9 +433,25 @@ def save_temp_email_messages(email_addr: str, messages: List[Dict]) -> int:
             existing = get_temp_email_message_by_id(message_id, email_addr=email_addr)
             content = str(msg.get("content") or msg.get("body_text") or "")
             html_content = str(msg.get("html_content") or msg.get("body_html") or "")
-            from_address = str(msg.get("from_address") or "")
+            from_address = str(
+                msg.get("from_address")
+                or msg.get("source")  # CF Worker 字段名
+                or msg.get("from")  # Graph API 风格
+                or msg.get("sender")  # 其他常见格式
+                or ""
+            )
             subject = str(msg.get("subject") or "")
-            timestamp = msg.get("timestamp", 0)
+            _ts_raw = msg.get("timestamp") or msg.get("created_at")
+            if isinstance(_ts_raw, str):
+                from datetime import datetime as _dt
+
+                try:
+                    _ts_clean = _ts_raw.replace("Z", "+00:00").replace(".000", "")
+                    timestamp = int(_dt.fromisoformat(_ts_clean).timestamp())
+                except (ValueError, AttributeError):
+                    timestamp = 0
+            else:
+                timestamp = int(_ts_raw or 0)
             raw_content = _serialize_temp_email_payload(msg)
 
             if existing:
@@ -384,9 +465,15 @@ def save_temp_email_messages(email_addr: str, messages: List[Dict]) -> int:
                     subject = str(existing.get("subject") or "")
                 if not timestamp:
                     timestamp = existing.get("timestamp", 0)
-                raw_content = _choose_richer_temp_email_payload(existing.get("raw_content"), msg)
+                raw_content = _choose_richer_temp_email_payload(
+                    existing.get("raw_content"), msg
+                )
 
-            has_html = bool(msg.get("has_html") or html_content or (existing and existing.get("has_html")))
+            has_html = bool(
+                msg.get("has_html")
+                or html_content
+                or (existing and existing.get("has_html"))
+            )
             db.execute(
                 """
                 INSERT OR REPLACE INTO temp_email_messages
@@ -427,7 +514,9 @@ def get_temp_email_messages(email_addr: str) -> List[Dict]:
     return [dict(row) for row in rows]
 
 
-def get_temp_email_message_by_id(message_id: str, *, email_addr: Optional[str] = None) -> Optional[Dict]:
+def get_temp_email_message_by_id(
+    message_id: str, *, email_addr: Optional[str] = None
+) -> Optional[Dict]:
     """根据消息 ID 获取临时邮件，优先按邮箱地址定位。"""
     db = get_db()
     if email_addr:
@@ -453,7 +542,9 @@ def get_temp_email_message_by_id(message_id: str, *, email_addr: Optional[str] =
     return dict(row) if row else None
 
 
-def delete_temp_email_message(message_id: str, *, email_addr: Optional[str] = None) -> bool:
+def delete_temp_email_message(
+    message_id: str, *, email_addr: Optional[str] = None
+) -> bool:
     """删除临时邮件，提供邮箱地址时仅删除目标邮箱下的消息。"""
     db = get_db()
     try:
@@ -463,7 +554,9 @@ def delete_temp_email_message(message_id: str, *, email_addr: Optional[str] = No
                 (email_addr, message_id),
             )
         else:
-            db.execute("DELETE FROM temp_email_messages WHERE message_id = ?", (message_id,))
+            db.execute(
+                "DELETE FROM temp_email_messages WHERE message_id = ?", (message_id,)
+            )
         db.commit()
         return True
     except Exception:
@@ -474,7 +567,9 @@ def get_temp_email_count(*, visible_only: bool = False) -> int:
     """获取临时邮箱数量。"""
     db = get_db()
     if visible_only:
-        cursor = db.execute("SELECT COUNT(*) as count FROM temp_emails WHERE visible_in_ui = 1")
+        cursor = db.execute(
+            "SELECT COUNT(*) as count FROM temp_emails WHERE visible_in_ui = 1"
+        )
     else:
         cursor = db.execute("SELECT COUNT(*) as count FROM temp_emails")
     row = cursor.fetchone()
