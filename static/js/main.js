@@ -33,6 +33,11 @@
         let isPolling = false;
         let knownEmailIds = new Set();
 
+        // 简洁模式自动轮询配置
+        let compactPollEnabled = false;
+        let compactPollInterval = 10;
+        let compactPollMaxDuration = 60;
+
         // 导航状态
         let currentPage = 'dashboard';
         let accountPanelDensitySyncHandle = null;
@@ -1820,6 +1825,20 @@ ${details}
                     document.getElementById('pollingInterval').value = String(parseIntegerSetting(data.settings.polling_interval, 10));
                     document.getElementById('pollingCount').value = String(parseIntegerSetting(data.settings.polling_count, 5));
 
+                    // 加载简洁模式自动轮询设置
+                    compactPollEnabled = data.settings.enable_compact_auto_poll === true;
+                    compactPollInterval = parseIntegerSetting(data.settings.compact_poll_interval, 10);
+                    compactPollMaxDuration = parseIntegerSetting(data.settings.compact_poll_max_duration, 60);
+                    const enableCompactAutoPollEl = document.getElementById('enableCompactAutoPoll');
+                    const compactPollIntervalEl = document.getElementById('compactPollInterval');
+                    const compactPollMaxDurationEl = document.getElementById('compactPollMaxDuration');
+                    if (enableCompactAutoPollEl) enableCompactAutoPollEl.checked = compactPollEnabled;
+                    if (compactPollIntervalEl) compactPollIntervalEl.value = String(compactPollInterval);
+                    if (compactPollMaxDurationEl) compactPollMaxDurationEl.value = String(compactPollMaxDuration);
+                    if (typeof applyCompactPollSettings === 'function') {
+                        applyCompactPollSettings({ enabled: compactPollEnabled, interval: compactPollInterval, maxDuration: compactPollMaxDuration });
+                    }
+
                     // 加载 Telegram 推送设置
                     const tgToken = document.getElementById('telegramBotToken');
                     const tgChat = document.getElementById('telegramChatId');
@@ -2118,6 +2137,21 @@ ${details}
             settings.email_notification_enabled = emailNotificationEnabled;
             settings.email_notification_recipient = emailNotificationRecipient;
 
+            // 简洁模式自动轮询配置收集
+            const enableCompactAutoPollEl = document.getElementById('enableCompactAutoPoll');
+            const compactPollIntervalEl = document.getElementById('compactPollInterval');
+            const compactPollMaxDurationEl = document.getElementById('compactPollMaxDuration');
+            const enableCompactPoll = enableCompactAutoPollEl ? enableCompactAutoPollEl.checked : false;
+            const cPollInterval = compactPollIntervalEl ? parseInt(compactPollIntervalEl.value) : 10;
+            const cPollMaxDuration = compactPollMaxDurationEl ? parseInt(compactPollMaxDurationEl.value) : 60;
+            if (!isNaN(cPollInterval) && cPollInterval >= 3 && cPollInterval <= 60) {
+                settings.enable_compact_auto_poll = enableCompactPoll;
+                settings.compact_poll_interval = cPollInterval;
+            }
+            if (!isNaN(cPollMaxDuration) && cPollMaxDuration >= 10 && cPollMaxDuration <= 600) {
+                settings.compact_poll_max_duration = cPollMaxDuration;
+            }
+
             // Telegram 推送配置
             const tgBotTokenEl = document.getElementById('telegramBotToken');
             const tgChatIdEl = document.getElementById('telegramChatId');
@@ -2151,6 +2185,13 @@ ${details}
 
                 if (data.success) {
                     applyPollingSettings(settings, { restart: true });
+                    // 应用简洁模式自动轮询设置
+                    compactPollEnabled = enableCompactPoll;
+                    compactPollInterval = isNaN(cPollInterval) ? 10 : cPollInterval;
+                    compactPollMaxDuration = isNaN(cPollMaxDuration) ? 60 : cPollMaxDuration;
+                    if (typeof applyCompactPollSettings === 'function') {
+                        applyCompactPollSettings({ enabled: compactPollEnabled, interval: compactPollInterval, maxDuration: compactPollMaxDuration });
+                    }
                     showToast(pickApiMessage(data, '设置已保存，重启应用后生效', 'Settings saved successfully'), 'success');
                     hideSettingsModal();
                 } else {

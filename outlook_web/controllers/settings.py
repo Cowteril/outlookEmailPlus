@@ -206,6 +206,15 @@ def api_get_settings() -> Any:
         == "true",
         "polling_interval": int(all_settings.get("polling_interval", "10")),
         "polling_count": int(all_settings.get("polling_count", "5")),
+        # 简洁模式自动轮询配置
+        "enable_compact_auto_poll": all_settings.get(
+            "enable_compact_auto_poll", "false"
+        )
+        == "true",
+        "compact_poll_interval": int(all_settings.get("compact_poll_interval", "10")),
+        "compact_poll_max_duration": int(
+            all_settings.get("compact_poll_max_duration", "60")
+        ),
         "email_notification_enabled": all_settings.get(
             "email_notification_enabled", "false"
         ).lower()
@@ -850,6 +859,37 @@ def api_update_settings() -> Any:
                 updated.append("轮询次数")
         except ValueError:
             errors.append("轮询次数必须是数字")
+
+    # 简洁模式自动轮询配置
+    if "enable_compact_auto_poll" in data:
+        enable_compact = str(data["enable_compact_auto_poll"]).lower()
+        if enable_compact in ("true", "false"):
+            queue_setting_update("enable_compact_auto_poll", enable_compact)
+            updated.append("简洁轮询开关")
+        else:
+            errors.append("简洁模式自动轮询开关必须是 true 或 false")
+
+    if "compact_poll_interval" in data:
+        try:
+            compact_interval = int(data["compact_poll_interval"])
+            if compact_interval < 3 or compact_interval > 60:
+                errors.append("简洁模式轮询间隔必须在 3-60 秒之间")
+            else:
+                queue_setting_update("compact_poll_interval", str(compact_interval))
+                updated.append("简洁轮询间隔")
+        except (ValueError, TypeError):
+            errors.append("简洁模式轮询间隔必须是数字")
+
+    if "compact_poll_max_duration" in data:
+        try:
+            compact_duration = int(data["compact_poll_max_duration"])
+            if compact_duration < 10 or compact_duration > 600:
+                errors.append("最大监听时长必须在 10-600 秒之间")
+            else:
+                queue_setting_update("compact_poll_max_duration", str(compact_duration))
+                updated.append("简洁轮询时长")
+        except (ValueError, TypeError):
+            errors.append("最大监听时长必须是数字")
 
     # Telegram 推送配置
     if "telegram_poll_interval" in data:

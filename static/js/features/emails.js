@@ -950,6 +950,8 @@
                 if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
                     await navigator.clipboard.writeText(email);
                     showToast('邮箱地址已复制', 'success');
+                    // 派发 email-copied 事件，供简洁模式轮询引擎监听
+                    document.dispatchEvent(new CustomEvent('email-copied', { detail: { email } }));
                     return true;
                 }
 
@@ -972,6 +974,8 @@
                 }
 
                 showToast('邮箱地址已复制', 'success');
+                // 派发 email-copied 事件，供简洁模式轮询引擎监听
+                document.dispatchEvent(new CustomEvent('email-copied', { detail: { email } }));
                 return true;
             } catch (error) {
                 console.error('复制邮箱地址失败:', error);
