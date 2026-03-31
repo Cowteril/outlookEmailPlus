@@ -542,7 +542,12 @@
 
         // ==================== Dashboard ====================
 
+        let _dashboardLoading = false;
+
         async function loadDashboard() {
+            // Bug 3 修复：防重入，避免 dashboard 被多次并发触发导致重复轮询
+            if (_dashboardLoading) return;
+            _dashboardLoading = true;
             try {
                 const [groupsRes, tempRes] = await Promise.all([
                     fetch('/api/groups'),
@@ -621,6 +626,8 @@
                 }
             } catch (e) {
                 console.error('Dashboard load error:', e);
+            } finally {
+                _dashboardLoading = false;
             }
         }
 
