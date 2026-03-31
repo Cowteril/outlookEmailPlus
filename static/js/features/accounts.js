@@ -72,9 +72,7 @@
             if (view !== 'compact' && typeof pollEnabled !== 'undefined' && pollEnabled && typeof startPoll === 'function') {
                 // 如果该账号已在轮询中则跳过，避免重复启动和多余 Toast
                 var alreadyPolling = typeof pollMap !== 'undefined' && pollMap.has(email);
-                console.warn('[DEBUG-POLL] selectAccount: email=', email, 'view=', view, 'pollEnabled=', pollEnabled, 'alreadyPolling=', alreadyPolling);
                 if (!alreadyPolling) {
-                    console.warn('[DEBUG-POLL] selectAccount: starting poll for', email);
                     startPoll(email);
                 }
             }

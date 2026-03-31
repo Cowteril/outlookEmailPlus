@@ -32,7 +32,6 @@
                             if (currentGroupId === tempEmailGroupId) {
                                 loadTempEmails(true);
                             } else {
-                                console.warn('[DEBUG-POLL] loadGroups: currentGroupId exists, calling loadAccountsByGroup(', currentGroupId, ', true) — startPolling=false(default)');
                                 await loadAccountsByGroup(currentGroupId, true);
                             }
                         }
@@ -40,7 +39,6 @@
                         // 首次进入：自动选中第一个非临时邮箱分组
                         const firstNormalGroup = groups.find(g => !isTempMailboxGroup(g));
                         if (firstNormalGroup) {
-                            console.warn('[DEBUG-POLL] loadGroups: first enter, calling selectGroup(', firstNormalGroup.id, ') — NO batch polling');
                             selectGroup(firstNormalGroup.id);
                         }
                     }
@@ -90,8 +88,6 @@
 
         // 选择分组
         async function selectGroup(groupId) {
-            console.warn('[DEBUG-POLL] selectGroup called: groupId=', groupId);
-            console.trace('[DEBUG-POLL] selectGroup call stack');
             currentGroupId = groupId;
             currentAccountPage = 1;  // 切换分组时重置到第 1 页
 
@@ -166,8 +162,6 @@
 
         // 加载分组下的账号
         async function loadAccountsByGroup(groupId, forceRefresh = false) {
-            console.warn('[DEBUG-POLL] loadAccountsByGroup called: groupId=', groupId, 'forceRefresh=', forceRefresh);
-            console.trace('[DEBUG-POLL] loadAccountsByGroup call stack');
             const container = document.getElementById('accountList');
 
             // 保存当前滚动位置（forceRefresh 时恢复）
