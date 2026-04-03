@@ -285,6 +285,9 @@
         'Cloudflare Worker 的部署 URL，不含尾部斜杠。': 'Cloudflare Worker deployment URL, without trailing slash.',
         'CF Worker Admin 密码': 'CF Worker Admin Password',
         '对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。': 'Password value from the CF Worker ADMIN_PASSWORDS environment variable.',
+        '☁ 从 CF Worker 同步域名': '☁ Sync Domains from CF Worker',
+        '自动读取 CF Worker 的域名配置，同步至下方「临时邮箱可用域名」和「默认域名」。': 'Automatically read the CF Worker domain configuration and sync to the "Available Domains" and "Default Domain" fields below.',
+        '⏳ 同步中…': '⏳ Syncing…',
         // ── 设置页：对外 API ──
         '对外开放 API Key': 'External API Key',
         '对外开放 API 多 Key 配置（JSON）': 'External API Multi-Key Configuration (JSON)',
