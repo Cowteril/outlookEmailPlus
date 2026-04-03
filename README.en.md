@@ -39,13 +39,28 @@ The repository already includes some screenshots, and more can be added later.
 Highlights include:
 
 - current stable version: `v1.11.0`
-- mailbox pool project isolation: with the same `caller_id + project_key` combination, already-used accounts are no longer re-claimed (PR#27, DB v17)
-- CF Worker temp-mail multi-domain support: multiple CF Worker domains can now be configured in the settings page, and a new "Sync Domains" button refreshes the list
-- CF Worker Admin Key is now encrypted at rest (DB v18) and no longer stored in plaintext
-- BUG-06 fix: mailbox selection is preserved after generating or deleting a temp mailbox
-- BUG-07 fix: domain dropdown selection is no longer reset on temp-mail panel refresh
-- i18n expansion: domain hint texts in the temp-mail panel, CF Worker domain sync button, and more added to bilingual coverage
-- CI fully restored: black formatting, flake8 E203/C901 noqa suppressions, pool.py duplicate function cleanup, and test assertion alignment (`success` → `used`)
+
+**Mail Pool Enhancements**
+- Project-scoped claim isolation (PR#27): `claim-random` now accepts a `project_key` parameter; accounts already used under the same `caller_id + project_key` combination are not re-claimed (DB v17)
+
+**CF Worker Temp Mail**
+- Multi-domain support: multiple CF Worker domains can now be configured in the Settings page; a new "Sync Domains" button refreshes the domain list in one click
+- Admin Key encrypted at rest: `cf_worker_admin_key` is now stored with an `enc:` prefix using symmetric encryption and is no longer saved in plaintext (DB v18)
+
+**Frontend UX Fixes**
+- BUG-06: mailbox selection highlight is correctly preserved after generating or deleting a temp mailbox
+- BUG-07: domain dropdown selection is no longer reset when the temp-mail panel refreshes its message list
+- Issue #24: fixed email expand/active state being lost on re-render, i18n language switch not refreshing the account list, and viewport height chain breakage
+
+**Poll Engine Refactor**
+- Merged the dual polling systems (standard mode + compact mode) into a single unified `poll-engine` (4-phase refactor)
+- Fixed batch email fetching on initial load, duplicate poll start on group switch, and cross-view poll state accumulation
+
+**Account List**
+- Added frontend pagination (50 accounts per page) for smoother rendering with large account sets
+
+**i18n**
+- Added bilingual translations for temp-mail panel domain hint texts and CF Worker domain sync button
 
 ## Core Capabilities
 
