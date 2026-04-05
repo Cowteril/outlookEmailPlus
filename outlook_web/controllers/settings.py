@@ -330,6 +330,7 @@ def api_get_settings() -> Any:
         minimum=10,
         maximum=86400,
     )
+    safe_settings["telegram_proxy_url"] = settings_repo.get_telegram_proxy_url()
 
     # 读取 ui_layout_v2 布局状态
     ui_layout = settings_repo.get_ui_layout_v2()
@@ -963,6 +964,11 @@ def api_update_settings() -> Any:
         queue_setting_update("telegram_chat_id", tg_chat_id)
         updated.append("Telegram Chat ID")
 
+    if "telegram_proxy_url" in data:
+        tg_proxy = str(data["telegram_proxy_url"]).strip()
+        queue_setting_update("telegram_proxy_url", tg_proxy)
+        updated.append("Telegram 代理地址")
+
     # 更新 ui_layout_v2 布局状态
     if "ui_layout_v2" in data:
         new_layout = data["ui_layout_v2"]
@@ -1284,3 +1290,58 @@ def api_test_telegram() -> Any:
         "发送失败，请检查 Bot Token 和 Chat ID 是否正确",
         message_en="Failed to send test message. Please check whether the Bot Token and Chat ID are correct",
     )
+
+
+@login_required
+def api_test_telegram_proxy() -> Any:
+    """测试 Telegram 代理连通性：用指定代理实际请求 api.telegram.org/getMe"""
+    import time
+
+    import requests as req
+
+    from outlook_web.services.graph import build_proxies
+
+    data = request.get_json(silent=True) or {}
+    proxy_url = str(data.get("proxy_url", "")).strip()
+
+    bot_token = settings_repo.get_telegram_bot_token()
+    if not bot_token:
+        return _json_error(
+            "TELEGRAM_NOT_CONFIGURED",
+            "请先配置 Telegram Bot Token",
+            message_en="Please configure Telegram Bot Token first",
+        )
+
+    proxies = build_proxies(proxy_url) if proxy_url else None
+    test_url = f"https://api.telegram.org/bot{bot_token}/getMe"
+    t0 = time.monotonic()
+    try:
+        resp = req.get(test_url, proxies=proxies, timeout=10)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        if resp.ok:
+            return jsonify(
+                {
+                    "success": True,
+                    "ok": True,
+                    "message": "代理连通成功",
+                    "latency_ms": latency_ms,
+                }
+            )
+        return jsonify(
+            {
+                "success": True,
+                "ok": False,
+                "message": f"代理可达但 Telegram 返回错误 HTTP {resp.status_code}",
+                "latency_ms": latency_ms,
+            }
+        )
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return jsonify(
+            {
+                "success": True,
+                "ok": False,
+                "message": f"连接失败：{exc}",
+                "latency_ms": latency_ms,
+            }
+        )

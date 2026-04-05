@@ -1720,11 +1720,13 @@ ${details}
                     const tgToken = document.getElementById('telegramBotToken');
                     const tgChat = document.getElementById('telegramChatId');
                     const tgPoll = document.getElementById('telegramPollInterval');
+                    const tgProxy = document.getElementById('telegramProxyUrl');
                     const emailEnabled = document.getElementById('emailNotificationEnabled');
                     const emailRecipient = document.getElementById('emailNotificationRecipient');
                     if (tgToken) tgToken.value = data.telegram_bot_token || '';
                     if (tgChat) tgChat.value = data.telegram_chat_id || '';
                     if (tgPoll) tgPoll.value = String(parseIntegerSetting(data.telegram_poll_interval, 600));
+                    if (tgProxy) tgProxy.value = (data.settings && data.settings.telegram_proxy_url) || '';
                     if (emailEnabled) emailEnabled.checked = !!data.settings.email_notification_enabled;
                     if (emailRecipient) emailRecipient.value = data.settings.email_notification_recipient || '';
                 }
@@ -2045,9 +2047,11 @@ ${details}
             const tgBotTokenEl = document.getElementById('telegramBotToken');
             const tgChatIdEl = document.getElementById('telegramChatId');
             const tgPollIntervalEl = document.getElementById('telegramPollInterval');
+            const tgProxyUrlEl = document.getElementById('telegramProxyUrl');
             const tgBotToken = tgBotTokenEl ? tgBotTokenEl.value.trim() : '';
             const tgChatId = tgChatIdEl ? tgChatIdEl.value.trim() : '';
             const tgPollInterval = tgPollIntervalEl ? parseInt(tgPollIntervalEl.value) : NaN;
+            const tgProxyUrl = tgProxyUrlEl ? tgProxyUrlEl.value.trim() : '';
 
             if (tgBotToken) {
                 settings.telegram_bot_token = tgBotToken;
@@ -2062,6 +2066,7 @@ ${details}
                 }
                 settings.telegram_poll_interval = tgPollInterval;
             }
+            settings.telegram_proxy_url = tgProxyUrl;
 
             try {
                 const response = await fetch('/api/settings', {
@@ -2100,6 +2105,32 @@ ${details}
                 showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('📨 发送测试消息'); }
+            }
+        }
+
+        async function testTelegramProxy() {
+            const btn = document.getElementById('btnTestTelegramProxy');
+            const resultEl = document.getElementById('telegramProxyTestResult');
+            const proxyInput = document.getElementById('telegramProxyUrl');
+            const proxyUrl = proxyInput ? proxyInput.value.trim() : '';
+            if (btn) { btn.disabled = true; btn.textContent = translateAppTextLocal('⏳ 测试中…'); }
+            if (resultEl) resultEl.textContent = '';
+            try {
+                const resp = await fetch('/api/settings/test-telegram-proxy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ proxy_url: proxyUrl })
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    if (resultEl) { resultEl.textContent = '✅ 连通'; resultEl.style.color = 'var(--success, green)'; }
+                } else {
+                    if (resultEl) { resultEl.textContent = `❌ ${data.message || '失败'}`; resultEl.style.color = 'var(--danger, red)'; }
+                }
+            } catch (e) {
+                if (resultEl) { resultEl.textContent = `❌ ${e.message}`; resultEl.style.color = 'var(--danger, red)'; }
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('🔗 测试连通性'); }
             }
         }
 
@@ -2347,6 +2378,9 @@ ${details}
 
                 const tgPoll = parseInt(document.getElementById('telegramPollInterval')?.value);
                 if (!isNaN(tgPoll) && tgPoll >= 10 && tgPoll <= 86400) settings.telegram_poll_interval = tgPoll;
+
+                const tgProxyUrlQuick = document.getElementById('telegramProxyUrl')?.value?.trim();
+                if (tgProxyUrlQuick !== undefined) settings.telegram_proxy_url = tgProxyUrlQuick;
             }
 
             if (Object.keys(settings).length === 0) return;

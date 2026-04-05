@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from outlook_web.errors import build_error_payload
-from outlook_web.services.graph import get_access_token_graph
+from outlook_web.services.graph import build_proxies, get_access_token_graph
 from outlook_web.services.http import get_response_details
 
 # Token 端点
@@ -29,7 +29,9 @@ def decode_header_value(header_value: str) -> str:
         for part, charset in decoded_parts:
             if isinstance(part, bytes):
                 try:
-                    decoded_string += part.decode(charset if charset else "utf-8", "replace")
+                    decoded_string += part.decode(
+                        charset if charset else "utf-8", "replace"
+                    )
                 except (LookupError, UnicodeDecodeError):
                     decoded_string += part.decode("utf-8", "replace")
             else:
@@ -55,7 +57,11 @@ def get_email_body(msg) -> str:
                     break
                 except Exception:
                     continue
-            elif content_type == "text/html" and "attachment" not in content_disposition and not body:
+            elif (
+                content_type == "text/html"
+                and "attachment" not in content_disposition
+                and not body
+            ):
                 try:
                     payload = part.get_payload(decode=True)
                     charset = part.get_content_charset() or "utf-8"
@@ -73,8 +79,11 @@ def get_email_body(msg) -> str:
     return body
 
 
-def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str, Any]:
+def get_access_token_imap_result(
+    client_id: str, refresh_token: str, proxy_url: str = ""
+) -> Dict[str, Any]:
     """获取 IMAP access_token（包含错误详情）"""
+    proxies = build_proxies(proxy_url) if proxy_url else None
     try:
         res = requests.post(
             TOKEN_URL_IMAP,
@@ -85,6 +94,7 @@ def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str
                 "scope": "https://outlook.office.com/IMAP.AccessAsUser.All offline_access",
             },
             timeout=30,
+            proxies=proxies,
         )
 
         if res.status_code != 200:
@@ -128,9 +138,11 @@ def get_access_token_imap_result(client_id: str, refresh_token: str) -> Dict[str
         }
 
 
-def get_access_token_imap(client_id: str, refresh_token: str) -> Optional[str]:
+def get_access_token_imap(
+    client_id: str, refresh_token: str, proxy_url: str = ""
+) -> Optional[str]:
     """获取 IMAP access_token"""
-    result = get_access_token_imap_result(client_id, refresh_token)
+    result = get_access_token_imap_result(client_id, refresh_token, proxy_url=proxy_url)
     if result.get("success"):
         return result.get("access_token")
     return None
@@ -143,9 +155,19 @@ def get_emails_imap(
     folder: str = "inbox",
     skip: int = 0,
     top: int = 20,
+    proxy_url: str = "",
 ) -> Dict[str, Any]:
     """使用 IMAP 获取邮件列表（支持分页和文件夹选择）- 默认使用新版服务器"""
-    return get_emails_imap_with_server(account, client_id, refresh_token, folder, skip, top, IMAP_SERVER_NEW)
+    return get_emails_imap_with_server(
+        account,
+        client_id,
+        refresh_token,
+        folder,
+        skip,
+        top,
+        IMAP_SERVER_NEW,
+        proxy_url=proxy_url,
+    )
 
 
 def get_emails_imap_with_server(
@@ -156,9 +178,12 @@ def get_emails_imap_with_server(
     skip: int = 0,
     top: int = 20,
     server: str = IMAP_SERVER_NEW,
+    proxy_url: str = "",
 ) -> Dict[str, Any]:
     """使用 IMAP 获取邮件列表（支持分页、文件夹选择和服务器选择）"""
-    token_result = get_access_token_imap_result(client_id, refresh_token)
+    token_result = get_access_token_imap_result(
+        client_id, refresh_token, proxy_url=proxy_url
+    )
     if not token_result.get("success"):
         return {"success": False, "error": token_result.get("error")}
 
@@ -210,7 +235,9 @@ def get_emails_imap_with_server(
                 if status == "OK" and folder_list:
                     for folder_item in folder_list:
                         if isinstance(folder_item, bytes):
-                            available_folders.append(folder_item.decode("utf-8", errors="ignore"))
+                            available_folders.append(
+                                folder_item.decode("utf-8", errors="ignore")
+                            )
                         else:
                             available_folders.append(str(folder_item))
 
@@ -272,11 +299,21 @@ def get_emails_imap_with_server(
                     body_preview = get_email_body(msg)
                     emails_data.append(
                         {
-                            "id": (msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)),
-                            "subject": decode_header_value(msg.get("Subject", "无主题")),
+                            "id": (
+                                msg_id.decode()
+                                if isinstance(msg_id, bytes)
+                                else str(msg_id)
+                            ),
+                            "subject": decode_header_value(
+                                msg.get("Subject", "无主题")
+                            ),
                             "from": decode_header_value(msg.get("From", "未知发件人")),
                             "date": msg.get("Date", "未知时间"),
-                            "body_preview": (body_preview[:200] + "..." if len(body_preview) > 200 else body_preview),
+                            "body_preview": (
+                                body_preview[:200] + "..."
+                                if len(body_preview) > 200
+                                else body_preview
+                            ),
                         }
                     )
             except Exception:
@@ -308,9 +345,18 @@ def get_email_detail_imap(
     refresh_token: str,
     message_id: str,
     folder: str = "inbox",
+    proxy_url: str = "",
 ) -> Optional[Dict]:
     """使用 IMAP 获取邮件详情（默认使用新版服务器）。"""
-    return get_email_detail_imap_with_server(account, client_id, refresh_token, message_id, folder, IMAP_SERVER_NEW)
+    return get_email_detail_imap_with_server(
+        account,
+        client_id,
+        refresh_token,
+        message_id,
+        folder,
+        IMAP_SERVER_NEW,
+        proxy_url=proxy_url,
+    )
 
 
 def get_email_detail_imap_with_server(
@@ -320,9 +366,10 @@ def get_email_detail_imap_with_server(
     message_id: str,
     folder: str = "inbox",
     server: str = IMAP_SERVER_NEW,
+    proxy_url: str = "",
 ) -> Optional[Dict]:
     """使用 IMAP 获取邮件详情（支持指定服务器）。"""
-    access_token = get_access_token_imap(client_id, refresh_token)
+    access_token = get_access_token_imap(client_id, refresh_token, proxy_url=proxy_url)
     if not access_token:
         return None
 
@@ -375,7 +422,11 @@ def get_email_detail_imap_with_server(
 
         raw_text = ""
         try:
-            raw_text = raw_email.decode("utf-8", errors="replace") if isinstance(raw_email, (bytes, bytearray)) else ""
+            raw_text = (
+                raw_email.decode("utf-8", errors="replace")
+                if isinstance(raw_email, (bytes, bytearray))
+                else ""
+            )
         except Exception:
             raw_text = ""
 
