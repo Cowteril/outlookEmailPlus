@@ -809,6 +809,15 @@
                                     </div>
                                     <div class="form-hint">范围：10-86400 秒，默认 600 秒（10 分钟）</div>
                                 </div>
+                                <div class="form-group">
+                                    <label class="form-label">代理地址 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（可选，访问 Telegram API 时使用）</span></label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="text" class="form-input" id="telegramProxyUrl" placeholder="socks5://user:pass@host:port 或 http://host:port" style="max-width: 400px;">
+                                        <button class="btn btn-outline" onclick="testTelegramProxy()" id="btnTestTelegramProxy" style="font-size: 0.85rem; white-space: nowrap;">🔗 测试连通性</button>
+                                        <span id="telegramProxyTestResult" style="font-size: 0.85rem;"></span>
+                                    </div>
+                                    <div class="form-hint">留空则直连。格式：socks5://host:port 或 http://host:port</div>
+                                </div>
                                 <div class="form-group" style="margin-top: 0.5rem;">
                                     <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">📨 发送测试消息</button>
                                     <div class="form-hint">验证当前 Telegram 通知通道是否配置正确</div>
