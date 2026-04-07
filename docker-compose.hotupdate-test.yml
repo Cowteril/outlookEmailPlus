@@ -17,6 +17,8 @@ services:
       SCHEDULER_AUTOSTART: "true"
       DATABASE_PATH: "/app/data/outlook_accounts.db"
       WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-test-hotupdate-token}"
+      # 部署信息检测：显式告知当前镜像名，避免误判为本地构建
+      DOCKER_IMAGE: "guangshanshui/outlook-email-plus:latest"
     volumes:
       - ./data:/app/data
     restart: unless-stopped

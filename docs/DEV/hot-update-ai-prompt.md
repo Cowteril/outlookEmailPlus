@@ -96,11 +96,13 @@ docker-compose.yml           # app + watchtower 两个服务
 2. ✅ 检测: 镜像名/本地构建/固定标签/Watchtower 连通性
 3. ✅ 返回警告信息和 `can_auto_update` 状态
 4. ✅ 前端 `templates/index.html` 添加 `deploymentWarnings` 占位符
+5. ✅ 前端 `static/js/main.js` 调用 API 并渲染警告列表（支持中/英切换重渲染）
 
 **已修改文件**:
 - `outlook_web/controllers/system.py`: 新增 `api_deployment_info()` (177 行)
 - `outlook_web/routes/system.py`: 注册路由
 - `templates/index.html`: 添加警告容器
+- `static/js/main.js`: 新增 `loadDeploymentInfo()` / `renderDeploymentWarnings()` 并在 `loadSettings()` 中触发
 
 ---
 
@@ -173,6 +175,32 @@ docker-compose.yml           # app + watchtower 两个服务
 
 ---
 
+### ✅ Phase 4: A2 方案 — 按需 helper job 容器（dev 分支，未提交）
+
+**背景**：Phase 3 的 Docker API 自更新实测发现"自杀问题"——容器在内部 stop 自己后，后台线程也被杀死，后续 create/rename/cleanup 步骤无法完成。
+
+**方案**：A2（按需 helper job 容器）
+
+- app 容器通过 Docker API 临时创建 updater 容器
+- updater 容器执行完整更新流程（pull→create→stop旧→start新→healthcheck→rename→cleanup）
+- updater 容器退出后 auto_remove 自动清理
+- 用户视角：平时 1 容器，更新时短暂 2 容器，最终恢复 1 容器
+
+**关键改动**：
+
+| 文件 | 改动 |
+|------|------|
+| `outlook_web/services/docker_update_helper.py` | **新增**（69 行）— updater 容器入口模块 |
+| `outlook_web/services/docker_update.py` | 新增 `get_container_info()` / `spawn_update_helper_container()`；增强 `validate_image_name()` 支持 digest/registry port；增强 volumes 解析支持 named volume；`self_update()` 新增 `target_container_id` 参数；步骤顺序调整为"先 stop 旧再 start 新"；失败时恢复旧容器 |
+| `outlook_web/controllers/system.py` | `healthz()` 新增 `boot_id`+`version`；`_trigger_docker_api_update()` 改为调用 `spawn_update_helper_container()`；`api_deployment_info()` 增加上下文感知警告 |
+| `static/js/main.js` | `waitForRestart()` boot_id 检测；Docker API 超时 180s；部署警告渲染 |
+| `templates/index.html` | `#deploymentWarnings` 容器 |
+| `tests/test_error_and_trace.py` | 适配 healthz 新字段 |
+| `tests/test_smoke_contract.py` | 适配 healthz 新字段 |
+| `docker-compose.docker-api-test.yml` | **新增** Docker API 测试 compose |
+
+---
+
 ## 参考文件清单
 
 实施时需要参考/修改的文件：
@@ -180,17 +208,20 @@ docker-compose.yml           # app + watchtower 两个服务
 | 文件 | 用途 |
 |------|------|
 | `outlook_web/__init__.py` | 版本号 |
-| `outlook_web/controllers/system.py` | 版本检测、更新触发、Watchtower 测试 |
+| `outlook_web/controllers/system.py` | 版本检测、更新触发、Watchtower 测试、部署信息、healthz |
 | `outlook_web/controllers/settings.py` | 设置读写（含 Watchtower 配置） |
 | `outlook_web/routes/system.py` | 路由注册 |
-| `outlook_web/services/docker_update.py` | Docker API 自更新服务（591 行） |
+| `outlook_web/services/docker_update.py` | Docker API 自更新服务（975 行） |
+| `outlook_web/services/docker_update_helper.py` | updater 容器入口（69 行） |
 | `outlook_web/repositories/settings.py` | 设置数据库操作 |
 | `outlook_web/security/crypto.py` | 加密/解密/脱敏 |
 | `outlook_web/app.py` | 静态文件缓存控制 |
-| `static/js/main.js` | 前端逻辑（triggerUpdate, waitForRestart, testWatchtower 等） |
-| `templates/index.html` | UI（版本更新 Banner, Watchtower 配置卡片） |
-| `docker-compose.yml` | Docker 编排配置 |
-| `requirements.txt` | Python 依赖 |
+| `static/js/main.js` | 前端逻辑（triggerUpdate, waitForRestart, testWatchtower, loadDeploymentInfo 等） |
+| `templates/index.html` | UI（版本更新 Banner, Watchtower 配置, deploymentWarnings） |
+| `docker-compose.yml` | Docker 编排配置（本地开发） |
+| `docker-compose.docker-api-test.yml` | Docker API 模式测试配置 |
+| `docker-compose.hotupdate-test.yml` | Watchtower 模式测试配置 |
+| `requirements.txt` | Python 依赖（含 docker>=6.0.0） |
 | `Dockerfile` | 镜像构建 |
 | `.env.example` | 环境变量模板 |
 
@@ -203,3 +234,4 @@ docker-compose.yml           # app + watchtower 两个服务
 3. **敏感信息处理**: Token 使用 `encrypt_data()` 加密存储，GET 时脱敏返回
 4. **向后兼容**: 环境变量配置作为数据库配置的 fallback
 5. **测试**: 每个阶段完成后提供验证方法
+6. **A2 模式关键约束**: app 容器必须挂载 docker.sock + 设置 DOCKER_SELF_UPDATE_ALLOW=true

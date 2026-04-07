@@ -1,0 +1,49 @@
+version: "3.9"
+
+# Docker API 自更新模拟测试：使用本地构建镜像（含 A2 代码改动），挂载 docker.sock 验证自更新流程
+# 使用方式：docker compose -f docker-compose.docker-api-test.yml up -d --build
+# 注意：此文件仅供开发测试使用，请勿用于生产环境
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: outlook-email-a2-test:latest
+    container_name: outlook-dockerapi-test
+    ports:
+      - "5003:5000"
+    environment:
+      SECRET_KEY: "${SECRET_KEY:-please-change-this-secret-key-for-testing}"
+      LOGIN_PASSWORD: "admin123"
+      FLASK_ENV: "production"
+      SCHEDULER_AUTOSTART: "true"
+      DATABASE_PATH: "/app/data/outlook_accounts.db"
+
+      # Docker API 自更新配置（测试用）
+      DOCKER_SELF_UPDATE_ALLOW: "true"
+
+      # 部署信息检测：显式告知当前镜像名，避免误判为本地构建
+      # 注意：这里故意使用远程镜像名，使得白名单校验通过（模拟真实场景）
+      DOCKER_IMAGE: "guangshanshui/outlook-email-plus:latest"
+
+    volumes:
+      - dockerapi_test_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - dockerapi-test-net
+
+networks:
+  dockerapi-test-net:
+    driver: bridge
+
+volumes:
+  dockerapi_test_data:

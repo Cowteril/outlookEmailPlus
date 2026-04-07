@@ -1745,10 +1745,129 @@ ${details}
                     updateMethodRadios.forEach(radio => {
                         radio.checked = (radio.value === updateMethod);
                     });
+
+                    // 触发更新方式切换逻辑（index.html 内联脚本绑定了 change 事件）
+                    // 注意：直接设置 radio.checked 不会触发 change，需手动派发事件以更新显隐。
+                    try {
+                        const selectedUpdateMethodRadio = document.querySelector('input[name="updateMethod"]:checked');
+                        if (selectedUpdateMethodRadio) {
+                            selectedUpdateMethodRadio.dispatchEvent(new Event('change'));
+                        }
+                    } catch (e) {
+                        // 静默失败
+                    }
+
+                    // 加载部署信息警告（用于一键更新的部署提示）
+                    loadDeploymentInfo({ silent: true });
                 }
             } catch (error) {
                 console.error('loadSettings error:', error);
                 showToast(translateAppTextLocal('加载设置失败'), 'error');
+            }
+        }
+
+        // ==================== 部署信息检测（用于一键更新提示） ====================
+
+        // 缓存最近一次部署信息，用于语言切换时重渲染
+        let lastDeploymentInfo = null;
+
+        function pickDeploymentWarningText(warning, keyZh, keyEn) {
+            if (!warning || typeof warning !== 'object') return '';
+            const zh = String(warning[keyZh] || '').trim();
+            const en = String(warning[keyEn] || '').trim();
+            return getUiLanguage() === 'en' ? (en || zh) : (zh || en);
+        }
+
+        function normalizeDeploymentWarningSeverity(severityRaw) {
+            const normalized = String(severityRaw || 'info').trim().toLowerCase();
+            if (normalized === 'error' || normalized === 'warning' || normalized === 'info') return normalized;
+            // 兼容后端可能返回的其它值
+            return 'info';
+        }
+
+        function buildDeploymentWarningStyle(severity) {
+            // 统一用 CSS 变量，兼容浅色/深色主题
+            if (severity === 'error') {
+                return {
+                    color: 'var(--clr-danger)',
+                    background: 'rgba(192,57,43,0.08)',
+                    icon: '⛔'
+                };
+            }
+            if (severity === 'warning') {
+                return {
+                    color: 'var(--clr-warn)',
+                    background: 'rgba(230,126,34,0.08)',
+                    icon: '⚠️'
+                };
+            }
+            return {
+                color: 'var(--clr-accent)',
+                background: 'rgba(200,150,62,0.08)',
+                icon: 'ℹ️'
+            };
+        }
+
+        function renderDeploymentWarnings(deployment) {
+            const container = document.getElementById('deploymentWarnings');
+            if (!container) return;
+
+            const warnings = Array.isArray(deployment && deployment.warnings) ? deployment.warnings : [];
+            if (warnings.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const html = warnings.map((warning) => {
+                const severity = normalizeDeploymentWarningSeverity(warning && warning.severity);
+                const style = buildDeploymentWarningStyle(severity);
+
+                const title = pickDeploymentWarningText(warning, 'message', 'message_en');
+                const suggestion = pickDeploymentWarningText(warning, 'suggestion', 'suggestion_en');
+
+                const suggestionHtml = suggestion
+                    ? `<div style="margin-top:6px;font-size:0.78rem;color:var(--text-muted);">
+                            <strong>${escapeHtml(translateAppTextLocal('处理建议'))}：</strong>${escapeHtml(suggestion)}
+                       </div>`
+                    : '';
+
+                return `
+                    <div class="form-hint" style="background:${style.background}; padding: 12px; border-radius: 6px; border-left: 3px solid ${style.color}; margin-bottom: 10px;">
+                        <div style="display:flex; gap: 10px; align-items:flex-start;">
+                            <div style="font-size: 1rem; line-height: 1.2;">${style.icon}</div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: var(--text);">${escapeHtml(title)}</div>
+                                ${suggestionHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = html;
+        }
+
+        async function loadDeploymentInfo({ silent = true } = {}) {
+            const container = document.getElementById('deploymentWarnings');
+            if (!container) return;
+
+            try {
+                const res = await fetch('/api/system/deployment-info', { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data || !data.success || !data.deployment) {
+                    if (!silent) {
+                        handleApiError(data || { success: false, error: '请求失败' }, '请求失败');
+                    }
+                    return;
+                }
+
+                lastDeploymentInfo = data.deployment;
+                renderDeploymentWarnings(lastDeploymentInfo);
+            } catch (e) {
+                if (!silent) {
+                    showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
+                }
             }
         }
 
@@ -3317,6 +3436,13 @@ ${details}
         window.addEventListener('ui-language-changed', () => {
             updateTopbar(currentPage);
             updateBatchActionBar();
+
+            // 语言切换后，重渲染部署警告文案（后端同时返回中英文）
+            if (lastDeploymentInfo) {
+                try {
+                    renderDeploymentWarnings(lastDeploymentInfo);
+                } catch (e) {}
+            }
         });
 
         // 显示批量刷新 Token 确认框
@@ -3821,22 +3947,17 @@ ${details}
                 
                 const data = await res.json();
                 if (data.success) {
+                    // 记录本次更新方式，供 waitForRestart 调整等待时长
+                    try {
+                        window.__lastUpdateMethod = updateMethod;
+                    } catch (e) {}
+
+                    // Docker API 与 Watchtower 都可能触发容器重启：统一走“等待恢复”逻辑
+                    btn.textContent = '等待容器重启...';
                     if (updateMethod === 'docker_api') {
-                        // Docker API 模式：显示详细步骤信息
-                        if (data.message && data.message.includes('已是最新')) {
-                            showToast('镜像已是最新，无需更新', 'info', 5000);
-                            btn.disabled = false;
-                            btn.textContent = '立即更新';
-                        } else {
-                            btn.textContent = '容器更新完成，刷新页面...';
-                            showToast('Docker API 自更新完成，正在刷新页面...', 'success', 3000);
-                            setTimeout(() => location.reload(), 3000);
-                        }
-                    } else {
-                        // Watchtower 模式：等待容器重启
-                        btn.textContent = '等待容器重启...';
-                        await waitForRestart();
+                        showToast('Docker API 更新已启动，等待容器重启...', 'info', 5000);
                     }
+                    await waitForRestart();
                 } else {
                     const msg = data.message || '未知错误';
                     // 区分常见错误场景，给出友好提示
@@ -3878,26 +3999,88 @@ ${details}
          * - 检测到服务恢复后刷新页面
          */
         async function waitForRestart() {
-            const MAX_WAIT_MS = 90000;  // 90 秒
+            // 默认 90 秒（Watchtower 通常更快）；Docker API 更新可能涉及 pull 镜像，适当放宽
+            const WATCHTOWER_MAX_WAIT_MS = 90000;  // 90 秒
+            const DOCKER_API_MAX_WAIT_MS = 180000;  // 180 秒
             const POLL_INTERVAL_MS = 3000;  // 每 3 秒
+
+            let MAX_WAIT_MS = WATCHTOWER_MAX_WAIT_MS;
+            try {
+                const method = (window.__lastUpdateMethod || 'watchtower');
+                if (method === 'docker_api') {
+                    MAX_WAIT_MS = DOCKER_API_MAX_WAIT_MS;
+                }
+            } catch (e) {
+                MAX_WAIT_MS = WATCHTOWER_MAX_WAIT_MS;
+            }
             const startAt = Date.now();
+            let seenDown = false;
+            let initialBootId = null;
+
+            // 先读取一次 boot_id，用于判断是否发生“新进程启动”
+            try {
+                const firstRes = await fetch('/healthz', { cache: 'no-store' });
+                if (firstRes.ok) {
+                    const firstData = await firstRes.json();
+                    if (firstData && firstData.boot_id) {
+                        initialBootId = String(firstData.boot_id);
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
 
             while (Date.now() - startAt < MAX_WAIT_MS) {
                 await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
                 try {
                     const res = await fetch('/healthz', { cache: 'no-store' });
                     if (res.ok) {
-                        showToast('更新完成，正在刷新页面...', 'success');
-                        setTimeout(() => location.reload(), 1500);
-                        return;
+                        let bootIdChanged = false;
+                        try {
+                            const d = await res.json();
+                            const bootId = d && d.boot_id ? String(d.boot_id) : null;
+                            if (bootId && initialBootId && bootId !== initialBootId) {
+                                bootIdChanged = true;
+                            }
+                        } catch (e) {
+                            // ignore json parse
+                        }
+
+                        // 以“boot_id 变化”作为更可靠的重启完成信号
+                        if (bootIdChanged || seenDown) {
+                            showToast('更新完成，正在刷新页面...', 'success');
+                            setTimeout(() => location.reload(), 1500);
+                            return;
+                        }
+                        // 还没看到重启迹象：可能仍在 pull/重建中，继续等
+                    } else {
+                        seenDown = true;
                     }
                 } catch (e) {
-                    // 容器正在重启中，继续轮询
+                    // 请求失败通常意味着容器正在重启/网络暂不可用
+                    seenDown = true;
                 }
             }
 
             // 超时处理
-            showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+            try {
+                const method = (window.__lastUpdateMethod || 'watchtower');
+                if (method === 'docker_api') {
+                    if (!seenDown) {
+                        showToast('等待超时：容器未发生重启，可能已是最新版本或更新仍在后台进行', 'warning', 9000);
+                    } else {
+                        showToast('等待超时：容器尚未恢复，请检查容器状态/日志', 'warning', 9000);
+                    }
+                } else {
+                    if (!seenDown) {
+                        showToast('等待超时：容器未发生重启，请检查 Watchtower 配置/日志', 'warning', 9000);
+                    } else {
+                        showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+                    }
+                }
+            } catch (e) {
+                showToast('更新超时，请手动检查容器状态', 'warning', 8000);
+            }
             const btn = document.getElementById('btnTriggerUpdate');
             if (btn) {
                 btn.disabled = false;

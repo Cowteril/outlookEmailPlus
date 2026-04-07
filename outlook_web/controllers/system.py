@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -27,6 +29,11 @@ from outlook_web.security.external_api_guard import external_api_guards
 from outlook_web.services import external_api as external_api_service
 from outlook_web.services.scheduler import REFRESH_LOCK_NAME
 
+logger = logging.getLogger(__name__)
+
+# 每次进程启动生成一次，用于前端判断是否发生重启
+_HEALTHZ_BOOT_ID = f"{int(time.time() * 1000)}-{os.getpid()}"
+
 
 def utcnow() -> datetime:
     """返回 naive UTC 时间（等价于旧的 datetime.utcnow()）"""
@@ -38,7 +45,16 @@ def utcnow() -> datetime:
 
 def healthz() -> Any:
     """基础健康检查（用于容器/反代探活）"""
-    return jsonify({"status": "ok"}), 200
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "version": APP_VERSION,
+                "boot_id": _HEALTHZ_BOOT_ID,
+            }
+        ),
+        200,
+    )
 
 
 @login_required
@@ -498,16 +514,18 @@ def _trigger_watchtower_update() -> Any:
 
 
 def _trigger_docker_api_update() -> Any:
-    """通过 Docker API 触发容器自更新（异步后台执行）
+    """通过 Docker API 触发容器自更新
 
-    使用 daemon 线程在后台执行自更新流程，先返回响应给客户端，
-    避免自更新过程中旧容器被停止导致响应无法到达客户端。
-    前端通过 waitForRestart() 轮询 /healthz 等待新容器启动。
+    A2（按需 helper job 容器）模式：
+    - 主应用容器只负责创建一个短生命周期 updater 容器
+    - updater 容器执行真正的更新流程（并在适当时机 stop/rename 旧容器）
+    - 主接口尽量快速返回，减少“响应中途被 stop”导致的失败概率
     """
-    import threading
+    import os
+    import json
     from flask import request, session
     from outlook_web.services import docker_update
-    from outlook_web.models import AuditLog
+    from outlook_web.audit import log_audit
 
     # 检查是否启用 Docker API 自更新
     if not docker_update.is_docker_api_enabled():
@@ -532,46 +550,47 @@ def _trigger_docker_api_update() -> Any:
     remove_old = request.args.get("remove_old", "false").lower() == "true"
     username = session.get("username", "unknown")
 
-    def _async_self_update():
-        """后台线程：执行自更新并记录审计日志"""
-        try:
-            result = docker_update.self_update(remove_old=remove_old)
-            AuditLog.create_log(
-                action="trigger_docker_api_update",
-                resource_type="system",
-                resource_id="docker_update",
-                details={
+    # 先在主线程记录一次审计日志（后台线程没有 request context）
+    try:
+        log_audit(
+            "trigger_docker_api_update_start",
+            "system",
+            "docker_update",
+            json.dumps(
+                {
                     "method": "docker_api",
                     "remove_old": remove_old,
-                    "result": result,
+                    "username": username,
                 },
-                username=username,
-            )
-            logger.info(f"Docker API 自更新完成: {result.get('message', '')}")
-        except Exception as e:
-            logger.error(f"Docker API 自更新后台执行失败: {str(e)}", exc_info=True)
-            AuditLog.create_log(
-                action="trigger_docker_api_update",
-                resource_type="system",
-                resource_id="docker_update",
-                details={
-                    "method": "docker_api",
-                    "remove_old": remove_old,
-                    "error": str(e),
-                },
-                username=username,
-            )
+                ensure_ascii=False,
+            ),
+        )
+    except Exception:
+        # 审计日志失败不影响主流程
+        pass
 
-    # 在后台线程中启动自更新，立即返回响应
-    update_thread = threading.Thread(target=_async_self_update, daemon=True)
-    update_thread.start()
+    # A2: 使用按需 updater 容器执行更新，避免“容器 stop 自己”导致流程中断。
+    # 这里尽量快速返回，updater 会延迟几秒再开始 stop。
+    try:
+        # 当前容器 ID 通常等于 HOSTNAME（短 ID），但 docker SDK 接受短/长 ID
+        target_id = os.getenv("HOSTNAME", "").strip()
+        if not target_id:
+            return jsonify({"success": False, "message": "无法获取当前容器 ID"}), 500
 
-    return jsonify(
-        {
-            "success": True,
-            "message": "Docker API 自更新已启动，容器即将重启",
-        }
-    )
+        ok, msg = docker_update.spawn_update_helper_container(
+            target_id,
+            remove_old=remove_old,
+            start_delay_seconds=2,
+            auto_remove=True,
+        )
+        if not ok:
+            return jsonify({"success": False, "message": msg}), 500
+        return jsonify({"success": True, "message": msg})
+    except Exception as e:
+        logger.error(f"启动 updater 容器失败: {str(e)}", exc_info=True)
+        return jsonify(
+            {"success": False, "message": f"启动 updater 失败: {str(e)}"}
+        ), 500
 
 
 @login_required
@@ -601,22 +620,41 @@ def api_deployment_info() -> Any:
     import os
     import socket
 
+    # 当前选择的更新方式（用于生成更符合语境的提示）
+    update_method = settings_repo.get_setting("update_method", "watchtower")
+    if update_method not in ("watchtower", "docker_api"):
+        update_method = "watchtower"
+
     deployment_info = {
         "image": "unknown",
         "is_local_build": False,
         "uses_fixed_tag": False,
-        "update_method": "watchtower",
+        "update_method": update_method,
         "watchtower_reachable": None,
+        "docker_api_available": False,
         "can_auto_update": False,
         "warnings": [],
     }
 
-    # 1. 检测镜像信息（通过环境变量或容器主机名）
-    # Docker 容器通常会设置 HOSTNAME 为容器 ID
-    hostname = os.getenv("HOSTNAME", "")
+    # 1. 检测镜像信息
+    # 优先策略：
+    # - 若已挂载 docker.sock（常见于 Docker API 更新模式），可直接通过 Docker API 获取真实镜像名
+    # - 否则回退到环境变量 DOCKER_IMAGE（可选）
+    # - 再回退到 cgroup 近似判断
+    image_name = os.getenv("DOCKER_IMAGE", "").strip()
 
-    # 尝试通过常见环境变量获取镜像信息（需要在 docker-compose 中设置）
-    image_name = os.getenv("DOCKER_IMAGE", "")
+    # 尝试通过 Docker API 获取镜像名（更准确）
+    try:
+        from outlook_web.services import docker_update
+
+        if docker_update.is_docker_api_enabled():
+            socket_ok, _ = docker_update.check_docker_socket()
+            if socket_ok:
+                cinfo = docker_update.get_current_container_info()
+                if cinfo and cinfo.get("image"):
+                    image_name = str(cinfo.get("image") or "").strip() or image_name
+    except Exception:
+        pass
 
     # 如果没有 DOCKER_IMAGE 环境变量，尝试读取 /proc/self/cgroup（仅 Linux）
     if not image_name:
@@ -676,6 +714,7 @@ def api_deployment_info() -> Any:
         watchtower_token = os.getenv("WATCHTOWER_HTTP_API_TOKEN", "")
 
     watchtower_reachable = False
+    # 只有在 Watchtower 相关信息存在时才探测，避免无意义的等待
     if watchtower_token and watchtower_url:
         try:
             import urllib.request
@@ -692,7 +731,20 @@ def api_deployment_info() -> Any:
 
     deployment_info["watchtower_reachable"] = watchtower_reachable
 
-    # 5. 生成警告信息
+    # 5. 检测 Docker API 可用性
+    docker_api_available = False
+    try:
+        from outlook_web.services import docker_update
+
+        if docker_update.is_docker_api_enabled():
+            socket_ok, _ = docker_update.check_docker_socket()
+            docker_api_available = socket_ok
+    except Exception:
+        docker_api_available = False
+
+    deployment_info["docker_api_available"] = docker_api_available
+
+    # 6. 生成警告信息
     warnings = []
 
     if is_local:
@@ -719,32 +771,50 @@ def api_deployment_info() -> Any:
             }
         )
 
+    # Watchtower 连通性提示：仅当当前选择 Watchtower 更新方式时才作为错误提示
     if not watchtower_reachable and not is_local:
-        warnings.append(
-            {
-                "type": "watchtower_unreachable",
-                "severity": "error",
-                "message": "无法连接 Watchtower 服务",
-                "message_en": "Cannot connect to Watchtower service",
-                "suggestion": "请确保 Watchtower 容器正常运行，并在系统设置中配置正确的 API 地址和 Token",
-                "suggestion_en": "Please ensure Watchtower container is running and API credentials are configured correctly",
-            }
-        )
+        if update_method == "watchtower":
+            warnings.append(
+                {
+                    "type": "watchtower_unreachable",
+                    "severity": "error",
+                    "message": "无法连接 Watchtower 服务（当前更新方式为 Watchtower）",
+                    "message_en": "Cannot connect to Watchtower service (current method: Watchtower)",
+                    "suggestion": "请确保 Watchtower 容器正常运行，并在系统设置中配置正确的 API 地址和 Token",
+                    "suggestion_en": "Please ensure Watchtower container is running and API credentials are configured correctly",
+                }
+            )
+        else:
+            # Docker API 模式下，Watchtower 不可达不应阻塞
+            warnings.append(
+                {
+                    "type": "watchtower_unreachable",
+                    "severity": "info",
+                    "message": "Watchtower 不可达（当前更新方式为 Docker API，可忽略）",
+                    "message_en": "Watchtower is unreachable (current method: Docker API, can be ignored)",
+                    "suggestion": "如需使用 Watchtower 更新，请先配置 Watchtower 容器；或继续使用 Docker API 更新方式",
+                    "suggestion_en": "If you want Watchtower updates, configure Watchtower; otherwise keep using Docker API method",
+                }
+            )
+
+    # Docker API 可用性提示
+    if update_method == "docker_api" and not is_local:
+        if not docker_api_available:
+            warnings.append(
+                {
+                    "type": "docker_api_unavailable",
+                    "severity": "error",
+                    "message": "Docker API 更新方式不可用（未挂载 docker.sock 或权限不足）",
+                    "message_en": "Docker API update is unavailable (docker.sock not mounted or insufficient permissions)",
+                    "suggestion": "请在部署时挂载 /var/run/docker.sock 并设置 DOCKER_SELF_UPDATE_ALLOW=true",
+                    "suggestion_en": "Mount /var/run/docker.sock and set DOCKER_SELF_UPDATE_ALLOW=true",
+                }
+            )
 
     deployment_info["warnings"] = warnings
 
-    # 6. 判断是否可以使用一键更新
+    # 7. 判断是否可以使用一键更新
     # 支持两种模式：Watchtower 连通 或 Docker API 已启用且 socket 可用
-    docker_api_available = False
-    try:
-        from outlook_web.services import docker_update
-
-        if docker_update.is_docker_api_enabled():
-            socket_ok, _ = docker_update.check_docker_socket()
-            docker_api_available = socket_ok
-    except Exception:
-        pass
-
     can_auto_update = (
         not is_local
         and (not uses_fixed_tag or image_name.endswith(":latest"))
@@ -752,7 +822,6 @@ def api_deployment_info() -> Any:
     )
 
     deployment_info["can_auto_update"] = can_auto_update
-    deployment_info["docker_api_available"] = docker_api_available
 
     return jsonify({"success": True, "deployment": deployment_info})
 

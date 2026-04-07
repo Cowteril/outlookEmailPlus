@@ -33,6 +33,8 @@
 | `waitForRestart()` | 轮询等待容器重启 |
 | `testWatchtower()` | 测试 Watchtower 连通性 |
 | `dismissVersionBanner()` | 关闭更新提示横幅 |
+| `loadDeploymentInfo()` | 拉取部署信息并渲染警告（/api/system/deployment-info） |
+| `renderDeploymentWarnings()` | 渲染部署警告到设置页占位符 |
 
 ### 数据流
 
@@ -193,29 +195,42 @@ level=fatal msg="api token is empty or has not been set. exiting"
 
 ---
 
-## 改进-001: 内置 Docker API 自更新（方案 A）
+## 改进-001: 内置 Docker API 自更新（方案 A2）
 
 ### 背景
 当前一键更新依赖 Watchtower 外部容器，用户需要额外部署。增加内置 Docker API 自更新可简化部署。
 
-### 解决方案
-- 新增 `outlook_web/services/docker_update.py` 封装 Docker API 操作
-- 扩展 `api_trigger_update()` 支持 method 参数（watchtower / docker_api）
-- 设置页面添加"更新方式"选择
-- docker-compose.yml 添加 docker.sock 挂载（可选，需用户显式启用）
-- 安全考虑: 默认关闭，需 DOCKER_SELF_UPDATE_ALLOW=true 启用
+Phase 3 实现了原始的 Docker API 自更新（后台线程模式），但实测发现"自杀问题"：容器在内部 stop 自己后，后台线程也被杀死，后续步骤无法完成。
+
+### 解决方案演进
+
+| 阶段 | 方案 | 问题 |
+|------|------|------|
+| Phase 3 | 后台线程执行 self_update() | 容器 stop 自己→进程被杀死→后续步骤中断 |
+| Phase 4（A2） | **按需 helper job 容器** | ✅ 解决：由独立 updater 容器执行更新 |
+
+### A2 方案详情
+
+**流程**：
+1. app 容器收到更新请求 → 鉴权 + 校验 → 通过 Docker API 创建 updater 容器 → 立即返回 HTTP 响应
+2. updater 容器启动 → sleep(2) 等响应 → pull 镜像 → create 新容器 → stop 旧容器 → start 新容器 → healthcheck → rename → cleanup → 退出（auto_remove）
+
+**关键设计**：
+- `start_delay_seconds=2`：给 HTTP 响应留出到达客户端的时间
+- **先 stop 旧再 start 新**：避免 host port 映射场景下端口冲突
+- `auto_remove=True`：updater 退出后自动清理，保持单容器体验
+- 失败回滚：新容器启动/健康检查失败时尝试恢复旧容器
+- `boot_id` 检测：前端通过 healthz 的 boot_id 判断是否真正发生了进程重启
 
 ### 涉及文件
-- `outlook_web/services/docker_update.py` — 新建
-- `outlook_web/controllers/system.py` — 扩展
-- `outlook_web/controllers/settings.py` — 新增配置
-- `static/js/main.js` — 前端逻辑
-- `templates/index.html` — UI
-- `docker-compose.yml` — docker.sock
+- `outlook_web/services/docker_update.py` — 核心更新服务（975 行）
+- `outlook_web/services/docker_update_helper.py` — **新增** updater 容器入口（69 行）
+- `outlook_web/controllers/system.py` — 触发入口 + healthz 增强 + 部署信息增强
+- `outlook_web/controllers/settings.py` — 更新方式配置
+- `static/js/main.js` — 前端逻辑（boot_id 检测、部署警告、超时优化）
+- `templates/index.html` — UI（deploymentWarnings 容器）
+- `docker-compose.docker-api-test.yml` — **新增** Docker API 测试配置
 - `requirements.txt` — docker SDK
-
-### 实施优先级
-Phase 3（在 BUG 修复和设置页面完善之后）
 
 ---
 
@@ -233,7 +248,7 @@ Phase 3（在 BUG 修复和设置页面完善之后）
 
 ## 总结
 
-所有计划任务 (P0-P3) 均已完成实施，一键更新功能已达到生产可用状态。
+所有计划任务 (P0-P3) 均已完成实施，Phase 4 (A2) 已实现（待验证提交）。
 
 ### 主要改进：
 1. ✅ 修复所有已知 BUG (Token 启动失败、浏览器缓存、仓库地址)
@@ -241,8 +256,33 @@ Phase 3（在 BUG 修复和设置页面完善之后）
 3. ✅ 支持两种更新方式 (Watchtower / Docker API)
 4. ✅ 完善的安全机制和回滚机制
 5. ✅ 友好的用户配置引导
+6. ✅ A2 按需 helper 容器方案解决"自杀问题"
 
 ### 关键文件清单:
-- 新增: `outlook_web/services/docker_update.py` (839 行)
-- 修改: 后端 4 个文件, 前端 2 个文件, 配置 3 个文件
+- 新增: `outlook_web/services/docker_update.py` (975 行)
+- 新增: `outlook_web/services/docker_update_helper.py` (69 行)
+- 新增: `docker-compose.docker-api-test.yml` (45 行)
+- 修改: 后端 4 个文件, 前端 2 个文件, 配置 3 个文件, 测试 2 个文件
 - 文档: `hot-update-ai-prompt.md`, `hot-update-baseline.md`
+
+### 前端新增/变更函数（A2 后）
+
+| 函数 | 说明 |
+|------|------|
+| `loadDeploymentInfo()` | 拉取部署信息并渲染警告 |
+| `renderDeploymentWarnings()` | 渲染部署警告到设置页（支持中/英切换） |
+| `waitForRestart()` | 轮询 /healthz，通过 boot_id 变化检测重启 |
+| `triggerUpdate()` | 统一触发入口，Docker API/Watchtower 都走 waitForRestart |
+
+### 前端轮询检测逻辑
+
+```
+waitForRestart():
+  1. 记录 initialBootId (GET /healthz → boot_id)
+  2. 循环轮询 (3s 间隔):
+     - 请求成功 + boot_id 变化 → 更新完成，刷新页面
+     - 请求成功 + boot_id 未变 + seenDown → 更新完成，刷新页面
+     - 请求成功 + boot_id 未变 + !seenDown → 继续等待（可能还在 pull 镜像）
+     - 请求失败 → seenDown=true，继续等待
+  3. 超时: Docker API 180s / Watchtower 90s
+```

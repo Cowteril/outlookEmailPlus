@@ -70,8 +70,19 @@ def validate_image_name(image_name: str) -> Tuple[bool, str]:
     Returns:
         (is_valid, message)
     """
-    # 去除 tag 部分进行检查
-    base_image = image_name.split(":")[0]
+    # 去除 tag/digest 部分进行检查
+    # 说明：镜像名可能包含 registry port（如 myreg:5000/repo:tag），不能用 split(':')[0]
+    ref = (image_name or "").strip()
+    # digest 形式：repo@sha256:...
+    if "@" in ref:
+        ref = ref.split("@", 1)[0]
+
+    base_image = ref
+    # tag 形式：repo:tag（仅当最后一个 ':' 之后不包含 '/' 才视为 tag）
+    if ":" in base_image:
+        left, right = base_image.rsplit(":", 1)
+        if "/" not in right:
+            base_image = left
 
     for allowed_prefix in ALLOWED_IMAGE_PREFIXES:
         if base_image == allowed_prefix or base_image.startswith(allowed_prefix + "/"):
@@ -80,8 +91,11 @@ def validate_image_name(image_name: str) -> Tuple[bool, str]:
     return False, f"镜像名不在白名单内: {image_name}"
 
 
-def get_current_container_info() -> Optional[Dict[str, Any]]:
-    """获取当前容器信息
+def get_container_info(container_id_or_name: str) -> Optional[Dict[str, Any]]:
+    """获取指定容器信息
+
+    Args:
+        container_id_or_name: 容器 ID / 短 ID / 名称
 
     Returns:
         {
@@ -100,30 +114,54 @@ def get_current_container_info() -> Optional[Dict[str, Any]]:
         import docker
 
         client = docker.from_env()
-
-        # 通过环境变量 HOSTNAME 获取当前容器 ID
-        hostname = os.getenv("HOSTNAME", "")
-        if not hostname:
-            logger.error("无法获取容器 ID (HOSTNAME 为空)")
-            return None
-
-        # Docker 容器的 HOSTNAME 通常是容器 ID 的短格式
-        # 尝试通过短 ID 查找容器
-        try:
-            container = client.containers.get(hostname)
-        except docker.errors.NotFound:
-            # 如果短 ID 找不到，尝试通过名称查找
-            containers = client.containers.list(filters={"name": "outlook-email-plus"})
-            if not containers:
-                logger.error(f"未找到容器: {hostname}")
-                return None
-            container = containers[0]
+        container = client.containers.get(container_id_or_name)
 
         # 提取容器配置信息
         inspect_data = container.attrs
         config = inspect_data.get("Config", {})
         host_config = inspect_data.get("HostConfig", {})
         network_settings = inspect_data.get("NetworkSettings", {})
+
+        # volumes/binds：同时兼容 bind mount 与 named volume
+        volume_specs: list[str] = []
+        try:
+            binds = host_config.get("Binds") or []
+            for b in binds:
+                if isinstance(b, str) and b.strip():
+                    volume_specs.append(b.strip())
+        except Exception:
+            pass
+
+        # docker inspect 的 Mounts 信息更完整（尤其是 named volume）
+        try:
+            mounts = inspect_data.get("Mounts") or []
+            for m in mounts:
+                if not isinstance(m, dict):
+                    continue
+                dest = (m.get("Destination") or "").strip()
+                if not dest:
+                    continue
+
+                m_type = (m.get("Type") or "").strip().lower()
+                # bind：使用 Source（宿主机路径）
+                if m_type == "bind":
+                    src = (m.get("Source") or "").strip()
+                # volume：优先用 Name（volume 名），回退 Source
+                elif m_type == "volume":
+                    src = (m.get("Name") or m.get("Source") or "").strip()
+                else:
+                    src = (m.get("Source") or m.get("Name") or "").strip()
+
+                if not src:
+                    continue
+
+                mode = "rw" if bool(m.get("RW", True)) else "ro"
+                spec = f"{src}:{dest}:{mode}"
+                # 去重
+                if spec not in volume_specs:
+                    volume_specs.append(spec)
+        except Exception:
+            pass
 
         return {
             "id": container.id,
@@ -133,7 +171,7 @@ def get_current_container_info() -> Optional[Dict[str, Any]]:
             "image_id": inspect_data.get("Image", ""),
             "labels": config.get("Labels", {}),
             "env": config.get("Env", []),
-            "volumes": host_config.get("Binds", []),
+            "volumes": volume_specs,
             "networks": list(network_settings.get("Networks", {}).keys()),
             "restart_policy": host_config.get("RestartPolicy", {}),
             "ports": host_config.get("PortBindings", {}),
@@ -142,8 +180,164 @@ def get_current_container_info() -> Optional[Dict[str, Any]]:
         }
 
     except Exception as e:
+        logger.error(
+            f"获取容器信息失败 ({container_id_or_name}): {str(e)}", exc_info=True
+        )
+        return None
+
+
+def get_current_container_info() -> Optional[Dict[str, Any]]:
+    """获取当前容器信息
+
+    优先使用 HOSTNAME（容器短 ID），失败时回退按名称查找。
+    """
+    # 通过环境变量 HOSTNAME 获取当前容器 ID
+    hostname = os.getenv("HOSTNAME", "")
+    if hostname:
+        info = get_container_info(hostname)
+        if info:
+            return info
+
+    # 回退：通过常见名称查找
+    try:
+        import docker
+
+        client = docker.from_env()
+        containers = client.containers.list(filters={"name": "outlook-email-plus"})
+        if not containers:
+            logger.error("未找到当前容器 (HOSTNAME 为空且 name 过滤无结果)")
+            return None
+        return get_container_info(containers[0].id)
+    except Exception as e:
         logger.error(f"获取当前容器信息失败: {str(e)}", exc_info=True)
         return None
+
+
+def spawn_update_helper_container(
+    target_container_id: str,
+    *,
+    remove_old: bool = False,
+    start_delay_seconds: int = 2,
+    auto_remove: bool = True,
+) -> Tuple[bool, str]:
+    """启动一个短生命周期的 updater 容器来执行更新。
+
+    设计目的：避免“容器在内部 stop 自己导致更新流程中断”的问题。
+
+    - app 容器负责：鉴权 + 基本校验 + 创建 updater 容器
+    - updater 容器负责：pull 镜像 + 创建新容器 + stop/rename/cleanup 旧容器
+
+    Args:
+        target_container_id: 要更新的 app 容器 ID
+        remove_old: 是否删除旧容器（默认 False，保留备份）
+        start_delay_seconds: updater 启动后等待秒数（给 HTTP 响应留出时间）
+        auto_remove: updater 退出后自动删除容器
+
+    Returns:
+        (success, message)
+    """
+    try:
+        import docker
+
+        client = docker.from_env()
+
+        # 基本安全提示：此模式要求当前容器具备 docker.sock 权限
+        socket_ok, socket_msg = check_docker_socket()
+        if not socket_ok:
+            return False, socket_msg
+
+        # 避免并发：如果已有 updater 在跑，直接拒绝
+        try:
+            existing = client.containers.list(
+                all=True,
+                filters={"label": "outlook_email_plus.update_helper=true"},
+            )
+            for c in existing:
+                try:
+                    c.reload()
+                    if c.status == "running":
+                        return False, "已有更新任务正在运行，请稍后再试"
+                except Exception:
+                    continue
+        except Exception:
+            # 如果列举失败，不阻塞主流程（后续创建可能仍会失败并返回异常）
+            pass
+
+        target = client.containers.get(target_container_id)
+        target_image = (
+            target.attrs.get("Config", {}).get("Image", "") if target.attrs else ""
+        )
+        if not target_image:
+            return False, "无法获取目标容器镜像信息"
+
+        valid, msg = validate_image_name(target_image)
+        if not valid:
+            return False, msg
+
+        helper_name = f"oep-updater-{int(time.time())}"
+        helper_cmd = ["python", "-m", "outlook_web.services.docker_update_helper"]
+
+        helper_env = {
+            # updater 容器内部也走同一套安全开关
+            "DOCKER_SELF_UPDATE_ALLOW": "true",
+            "DOCKER_UPDATE_TARGET_CONTAINER_ID": target_container_id,
+            "DOCKER_UPDATE_REMOVE_OLD": "true" if remove_old else "false",
+            "DOCKER_UPDATE_START_DELAY_SECONDS": str(int(start_delay_seconds)),
+        }
+
+        # 透传 registry 凭证（可选）：避免 updater 容器 pull 私有镜像失败
+        # 注意：仅当宿主机/当前容器已配置这些环境变量时才会传递。
+        for k in (
+            "DOCKER_AUTH_CONFIG",
+            "DOCKER_CONFIG",
+            "DOCKER_USERNAME",
+            "DOCKER_PASSWORD",
+        ):
+            v = os.getenv(k)
+            if v:
+                helper_env[k] = v
+
+        helper_labels = {
+            "outlook_email_plus.update_helper": "true",
+            "outlook_email_plus.target_container_id": target_container_id,
+            # 防止 Watchtower（如存在）误更新该容器
+            "com.centurylinklabs.watchtower.enable": "false",
+        }
+
+        helper_volumes = {
+            "/var/run/docker.sock": {
+                "bind": "/var/run/docker.sock",
+                "mode": "rw",
+            }
+        }
+
+        # 透传 docker config（可选）：例如挂载 /root/.docker 以支持私有仓库拉取
+        docker_cfg = os.getenv("DOCKER_CONFIG", "").strip()
+        if docker_cfg and os.path.exists(docker_cfg):
+            helper_volumes[docker_cfg] = {"bind": docker_cfg, "mode": "ro"}
+
+        logger.info(
+            f"启动 updater 容器: name={helper_name}, image={target_image}, target={target_container_id[:12]}"
+        )
+
+        # detach=True 让请求快速返回；remove/auto_remove 让容器运行完自动清理
+        container = client.containers.run(
+            image=target_image,
+            command=helper_cmd,
+            name=helper_name,
+            detach=True,
+            remove=auto_remove,
+            environment=helper_env,
+            volumes=helper_volumes,
+            labels=helper_labels,
+            restart_policy={"Name": "no"},
+        )
+
+        return True, f"更新任务已启动: {helper_name} ({container.short_id})"
+
+    except Exception as e:
+        logger.error(f"启动 updater 容器失败: {str(e)}", exc_info=True)
+        return False, f"启动 updater 容器失败: {str(e)}"
 
 
 def pull_latest_image(image_name: str) -> Tuple[bool, str, Optional[str]]:
@@ -468,7 +662,11 @@ def cleanup_old_container(container_id: str, remove: bool = False) -> Tuple[bool
         return False, error_msg
 
 
-def self_update(remove_old: bool = False) -> Dict[str, Any]:
+def self_update(
+    remove_old: bool = False,
+    *,
+    target_container_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """执行容器自更新
 
     完整流程：
@@ -538,8 +736,12 @@ def self_update(remove_old: bool = False) -> Dict[str, Any]:
             "steps": steps,
         }
 
-    # Step 3: 获取当前容器信息
-    current_container = get_current_container_info()
+    # Step 3: 获取当前容器信息（可指定目标容器）
+    current_container = (
+        get_container_info(target_container_id)
+        if target_container_id
+        else get_current_container_info()
+    )
     if not current_container:
         steps.append(
             {
@@ -643,7 +845,30 @@ def self_update(remove_old: bool = False) -> Dict[str, Any]:
             "steps": steps,
         }
 
-    # Step 8: 启动新容器
+    # Step 8: 停止旧容器（释放 host port，避免新容器启动时端口冲突）
+    # docker-compose 常见配置会映射 host 端口（如 5000:5000），无法实现“先起新容器再停旧容器”的无缝切换。
+    stop_ok, stop_msg = stop_old_container(current_container["id"])
+    steps.append(
+        {
+            "step": "stop_old_container",
+            "success": stop_ok,
+            "message": stop_msg,
+        }
+    )
+
+    if not stop_ok:
+        # 旧容器无法停止，则新容器启动必然端口冲突；此时取消更新并清理新容器。
+        try:
+            new_container.remove(force=True)
+        except Exception:
+            pass
+        return {
+            "success": False,
+            "message": f"停止旧容器失败，已取消更新: {stop_msg}",
+            "steps": steps,
+        }
+
+    # Step 9: 启动新容器
     start_ok, start_msg = start_new_container(new_container)
     steps.append(
         {
@@ -654,7 +879,17 @@ def self_update(remove_old: bool = False) -> Dict[str, Any]:
     )
 
     if not start_ok:
-        # 启动失败，删除新容器
+        # 启动失败：尝试恢复旧容器，并删除新容器
+        try:
+            import docker
+
+            client = docker.from_env()
+            old_c = client.containers.get(current_container["id"])
+            old_c.start()
+            logger.info("新容器启动失败，已尝试重新启动旧容器")
+        except Exception as e:
+            logger.error(f"新容器启动失败，恢复旧容器也失败: {str(e)}")
+
         try:
             new_container.remove(force=True)
             logger.info(f"新容器启动失败，已删除: {new_container.short_id}")
@@ -667,7 +902,7 @@ def self_update(remove_old: bool = False) -> Dict[str, Any]:
             "steps": steps,
         }
 
-    # Step 9: 健康检查
+    # Step 10: 健康检查
     health_ok, health_msg = health_check_new_container(new_container)
     steps.append(
         {
@@ -678,32 +913,32 @@ def self_update(remove_old: bool = False) -> Dict[str, Any]:
     )
 
     if not health_ok:
-        # 健康检查失败，停止并删除新容器
+        # 健康检查失败：删除新容器，并尝试恢复旧容器
         try:
             new_container.stop(timeout=5)
+        except Exception:
+            pass
+        try:
             new_container.remove(force=True)
             logger.info(f"新容器健康检查失败，已删除: {new_container.short_id}")
         except Exception as e:
             logger.error(f"删除不健康的新容器时出错: {str(e)}")
+
+        try:
+            import docker
+
+            client = docker.from_env()
+            old_c = client.containers.get(current_container["id"])
+            old_c.start()
+            logger.info("新容器健康检查失败，已尝试重新启动旧容器")
+        except Exception as e:
+            logger.error(f"新容器健康检查失败，恢复旧容器也失败: {str(e)}")
 
         return {
             "success": False,
             "message": health_msg,
             "steps": steps,
         }
-
-    # Step 10: 停止旧容器
-    stop_ok, stop_msg = stop_old_container(current_container["id"])
-    steps.append(
-        {
-            "step": "stop_old_container",
-            "success": stop_ok,
-            "message": stop_msg,
-        }
-    )
-
-    if not stop_ok:
-        logger.warning(f"停止旧容器失败，但新容器已启动: {stop_msg}")
 
     # Step 11: 重命名容器
     rename_ok, rename_msg = rename_containers(current_container["id"], new_container.id)
