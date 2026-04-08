@@ -969,6 +969,8 @@ def api_test_watchtower() -> Any:  # noqa: C901
         return jsonify({"success": False, "message": "Watchtower URL 未配置"})
 
     # 先测试连通性（GET /v1/update 返回 200 表示 API 可达）
+    # 注意: Watchtower 的 GET /v1/update 也会触发完整的镜像检查流程,
+    # 包括从 GHCR 拉取 manifest, 可能需要 20-30 秒才能返回
     try:
         test_req = urllib.request.Request(
             f"{wt_url}/v1/update",
@@ -977,7 +979,7 @@ def api_test_watchtower() -> Any:  # noqa: C901
                 "Authorization": f"Bearer {wt_token}",
             },
         )
-        with urllib.request.urlopen(test_req, timeout=5):
+        with urllib.request.urlopen(test_req, timeout=35):
             return jsonify(
                 {
                     "success": True,

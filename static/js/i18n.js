@@ -660,6 +660,7 @@
 
         // 手动触发容器更新
         '触发容器更新': 'Trigger Container Update',
+        '🚀 触发容器更新': '🚀 Trigger Container Update',
         '拉取最新镜像并重启容器，使用上方选择的更新方式': 'Pull the latest image and restart container using the selected method above',
         '当前已是最新版本，无需更新': 'Already up to date, no update needed',
         '当前已是最新版本': 'Already up to date',
@@ -668,8 +669,15 @@
         '更新请求失败：': 'Update request failed: ',
         '立即更新': 'Update Now',
 
+        // 设置面板 Tab 名
+        '基础': 'Basic',
+        '临时邮箱': 'Temp Mailboxes',
+        'API 安全': 'API Security',
+        '自动化': 'Automation',
+
         // 一键更新配置区域
         '一键更新配置': 'Auto Update Settings',
+        '🔄 一键更新配置': '🔄 Auto Update Settings',
         '更新方式': 'Update Method',
         'Watchtower（推荐）': 'Watchtower (Recommended)',
         'Docker API（高级）': 'Docker API (Advanced)',
