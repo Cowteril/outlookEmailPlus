@@ -1,41 +1,48 @@
 version: "3.9"
 
-# Docker API 自更新模拟测试：使用本地构建镜像（含 A2 代码改动），挂载 docker.sock 验证自更新流程
-# 使用方式：docker compose -f docker-compose.docker-api-test.yml up -d --build
+# Docker API 自更新模拟测试（A2 helper 容器模式）
+# 使用方式：docker compose -f docker-compose.docker-api-test.yml up -d
 # 注意：此文件仅供开发测试使用，请勿用于生产环境
+#
+# 测试流程：
+#   1. 启动后访问 http://localhost:5003 登录
+#   2. 在远端推送新代码，CI 构建新的 :hotupdate-test 镜像
+#   3. 在系统设置 → 一键更新中选择 Docker API 方式，触发更新
+#   4. 验证 helper 容器自动拉取新镜像并替换旧容器
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    # 策略A：禁止本地 build 镜像触发更新。
-    # 本测试镜像需要模拟“远程官方镜像引用”，否则会被白名单/本地构建策略拦截。
-    image: guangshanshui/outlook-email-plus:latest
+    # GHCR 镜像（国内网络推荐）
+    image: ghcr.io/zeropointsix/outlook-email-plus:${IMAGE_TAG:-hotupdate-test}
+    # Docker Hub 镜像（如需切换取消注释，并注释上行）：
+    # image: guangshanshui/outlook-email-plus:${IMAGE_TAG:-hotupdate-test}
     container_name: outlook-dockerapi-test
     ports:
       - "5003:5000"
+    env_file:
+      - .env
     environment:
       SECRET_KEY: "${SECRET_KEY:-please-change-this-secret-key-for-testing}"
       LOGIN_PASSWORD: "admin123"
       FLASK_ENV: "production"
       SCHEDULER_AUTOSTART: "true"
       DATABASE_PATH: "/app/data/outlook_accounts.db"
-
-      # Docker API 自更新配置（测试用）
+      # Docker API 自更新配置
       DOCKER_SELF_UPDATE_ALLOW: "true"
-
-      # 部署信息检测：显式告知当前镜像名，避免误判为本地构建
-      # 注意：这里故意使用远程镜像名，使得白名单校验通过（模拟真实场景）
-      DOCKER_IMAGE: "guangshanshui/outlook-email-plus:latest"
-
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
     volumes:
       - dockerapi_test_data:/app/data
+      - ./.runtime:/app/.runtime
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request as u; u.urlopen('http://localhost:5000/healthz', timeout=4).read()",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3

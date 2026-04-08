@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # 因此白名单仅允许官方远程镜像前缀，不再放行本地/无 namespace 的镜像名。
 ALLOWED_IMAGE_PREFIXES = [
     "guangshanshui/outlook-email-plus",
+    "ghcr.io/zeropointsix/outlook-email-plus",
 ]
 
 
@@ -52,16 +53,20 @@ def _looks_like_local_image_ref(image_ref: str) -> bool:
     # 注意：官方镜像可能使用 guangshanshui/outlook-email-plus:test 等 tag，不能简单检测 test 关键字
     # 改为：只检测明确的本地构建模式（无 namespace 或非官方 namespace）
 
-    # 提取 namespace（如 guangshanshui）
-    namespace = ref.split("/")[0] if "/" in ref else ""
+    # 提取 namespace 并检查是否为官方来源
+    # 对于 Docker Hub 镜像（如 guangshanshui/xxx），namespace 是第一段
+    # 对于 GHCR 等 registry 镜像（如 ghcr.io/zeropointsix/xxx），需要匹配前两段
+    _OFFICIAL_PREFIXES = [
+        "guangshanshui/",
+        "docker.io/guangshanshui/",
+        "ghcr.io/guangshanshui/",
+        "ghcr.io/zeropointsix/",
+    ]
 
-    # 如果是官方 namespace，不视为本地构建
-    if namespace in [
-        "guangshanshui",
-        "docker.io/guangshanshui",
-        "ghcr.io/guangshanshui",
-    ]:
-        return False
+    # 如果镜像引用以官方前缀开头，不视为本地构建
+    for prefix in _OFFICIAL_PREFIXES:
+        if lower_ref.startswith(prefix):
+            return False
 
     # 其他情况（非官方 namespace 或无 namespace）视为本地构建
     return True
