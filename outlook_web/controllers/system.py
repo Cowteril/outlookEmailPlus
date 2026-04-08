@@ -478,7 +478,7 @@ def _trigger_watchtower_update() -> Any:
             },
             data=b"",
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             status = resp.status
         if status == 200:
             return jsonify({"success": True, "message": "更新触发成功,容器即将重启"})

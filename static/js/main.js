@@ -3978,7 +3978,7 @@ ${details}
 
             try {
                 // 根据更新方式决定 timeout 和 URL
-                const timeout = updateMethod === 'docker_api' ? 120000 : 10000;  // Docker API 模式 120s, Watchtower 模式 10s
+                const timeout = updateMethod === 'docker_api' ? 120000 : 60000;  // Docker API 模式 120s, Watchtower 模式 60s
                 const url = `/api/system/trigger-update?method=${updateMethod}`;
                 
                 const controller = new AbortController();
@@ -4163,7 +4163,7 @@ ${details}
             const updateMethod = selectedRadio ? selectedRadio.value : 'watchtower';
 
             try {
-                const timeout = updateMethod === 'docker_api' ? 120000 : 10000;
+                const timeout = updateMethod === 'docker_api' ? 120000 : 60000;
                 const url = `/api/system/trigger-update?method=${updateMethod}`;
 
                 const controller = new AbortController();
