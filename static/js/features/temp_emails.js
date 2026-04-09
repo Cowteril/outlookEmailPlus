@@ -314,7 +314,7 @@
             } finally {
                 if (refreshBtn) {
                     refreshBtn.disabled = false;
-                    refreshBtn.textContent = translateAppTextLocal('🔄 获取邮件');
+                    refreshBtn.textContent = translateAppTextLocal('获取邮件');
                 }
             }
         }

@@ -391,7 +391,7 @@
             document.documentElement.dataset.theme = theme;
             localStorage.setItem('ol_theme', theme);
             const btn = document.getElementById('themeToggleBtn');
-            if (btn) btn.textContent = theme === 'dark' ? '☀ 浅色模式' : '☾ 深色模式';
+            if (btn) btn.textContent = theme === 'dark' ? '浅色模式' : '深色模式';
         }
 
         function toggleTheme() {
@@ -468,8 +468,8 @@
                     ` : `
                         ${switcherHtml}
                         <button class="btn-inline primary" onclick="showAddAccountModal()">＋ 添加账号</button>
-                        <button class="btn-inline ghost" onclick="showExportModal()">📤 导出</button>
-                        <button class="btn-inline ghost" onclick="showRefreshModal()">🔄 全量刷新 Token</button>
+                        <button class="btn-inline ghost" onclick="showExportModal()">导出</button>
+                        <button class="btn-inline ghost" onclick="showRefreshModal()">全量刷新 Token</button>
                     `;
                     actionsEl.classList.toggle('topbar-actions-compact', isCompactMode);
                     if (subtitleEl) {
@@ -2073,7 +2073,7 @@ ${details}
             } catch (e) {
                 showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('📨 发送测试消息'); }
+                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('发送测试消息'); }
             }
         }
 
@@ -2091,7 +2091,7 @@ ${details}
             } catch (e) {
                 showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('📨 发送测试邮件'); }
+                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('发送测试邮件'); }
             }
         }
 
@@ -2160,7 +2160,7 @@ ${details}
                     gap: 8px;
                     cursor: pointer;
                 `;
-                indicator.innerHTML = `<span style="animation: pulse 1.5s infinite;">🔄</span> ${translateAppTextLocal('轮询中')}`;
+                indicator.innerHTML = `<span style="animation: pulse 1.5s infinite;">⟳</span> ${translateAppTextLocal('轮询中')}`;
                 indicator.onclick = () => {
                     if (confirm('是否停止轮询？')) {
                         stopPolling(false);
@@ -2709,22 +2709,27 @@ ${details}
                 return;
             }
 
-            let html = '';
-            failedList.forEach(item => {
-                html += `
-                    <div style="padding: 12px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: start;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(item.email)}</div>
-                            <div style="font-size: 12px; color: #dc3545;">${escapeHtml(item.error || '未知错误')}</div>
-                        </div>
-                        <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${item.id}, '${escapeHtml(item.email)}')">
-                            重试
-                        </button>
+            listEl.innerHTML = `
+                <div class="log-surface">
+                    <div class="log-list">
+                        ${failedList.map(item => `
+                            <div class="log-item">
+                                <div class="log-main">
+                                    <div class="log-title log-mono">${escapeHtml(item.email)}</div>
+                                    <div class="log-detail" style="border-color: rgba(180,35,24,0.18); color: var(--clr-danger);">
+                                        ${escapeHtml(item.error || '未知错误')}
+                                    </div>
+                                </div>
+                                <div class="log-badge">
+                                    <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${item.id}, '${escapeJs(item.email)}')">
+                                        重试
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-                `;
-            });
-
-            listEl.innerHTML = html;
+                </div>
+            `;
             container.style.display = 'block';
         }
 
@@ -2746,24 +2751,36 @@ ${details}
 
                 if (data.success) {
                     if (data.logs.length === 0) {
-                        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">暂无失败状态的邮箱</div>';
+                        listEl.innerHTML = '<div class="empty-state empty-state--compact"><span class="empty-icon">✓</span><p>暂无失败状态的邮箱</p></div>';
                     } else {
-                        let html = '';
-                        data.logs.forEach(log => {
-                            html += `
-                                <div style="padding: 12px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center;">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(log.account_email)}</div>
-                                        <div style="font-size: 12px; color: #dc3545;">${escapeHtml(log.error_message || '未知错误')}</div>
-                                        <div style="font-size: 11px; color: #999; margin-top: 4px;">最后刷新: ${formatDateTime(log.created_at)}</div>
-                                    </div>
-                                    <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${log.account_id}, '${escapeJs(log.account_email)}')">
-                                        重试
-                                    </button>
+                        listEl.innerHTML = `
+                            <div class="log-toolbar">
+                                <span>${translateAppTextLocal(`当前失败状态（共 ${data.logs.length} 条）`)}</span>
+                            </div>
+                            <div class="log-surface">
+                                <div class="log-list">
+                                    ${data.logs.map(log => `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-title log-mono">${escapeHtml(log.account_email)}</div>
+                                                <div class="log-sub">
+                                                    <span>${translateAppTextLocal('最后刷新')}:</span>
+                                                    <span>${formatDateTime(log.created_at)}</span>
+                                                </div>
+                                                <div class="log-detail" style="border-color: rgba(180,35,24,0.18); color: var(--clr-danger);">
+                                                    ${escapeHtml(log.error_message || translateAppTextLocal('未知错误'))}
+                                                </div>
+                                            </div>
+                                            <div class="log-badge">
+                                                <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${log.account_id}, '${escapeJs(log.account_email)}')">
+                                                    ${translateAppTextLocal('重试')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
-                            `;
-                        });
-                        listEl.innerHTML = html;
+                            </div>
+                        `;
                     }
                     container.style.display = 'block';
                 }
@@ -2783,34 +2800,39 @@ ${details}
 
                 if (data.success) {
                     if (data.logs.length === 0) {
-                        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">暂无全量刷新历史</div>';
+                        listEl.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无全量刷新历史')}</p></div>`;
                     } else {
-                        listEl.innerHTML = `<div style="padding: 12px; background-color: #f8f9fa; border-bottom: 1px solid #e5e5e5; font-size: 13px; color: #666;">近半年刷新历史（共 ${data.logs.length} 条）</div>`;
-                        let html = '';
-                        data.logs.forEach(log => {
-                            const statusColor = log.status === 'success' ? '#28a745' : '#dc3545';
-                            const statusText = log.status === 'success' ? '成功' : '失败';
-                            const typeText = translateAppTextLocal(log.refresh_type === 'manual' ? '手动' : '自动');
-                            const typeColor = log.refresh_type === 'manual' ? '#007bff' : '#28a745';
-                            const typeBgColor = log.refresh_type === 'manual' ? '#e7f3ff' : '#e8f5e9';
-
-                            html += `
-                                <div style="padding: 14px; border-bottom: 1px solid #e5e5e5; transition: background-color 0.2s;"
-                                     onmouseover="this.style.backgroundColor='#f8f9fa'"
-                                     onmouseout="this.style.backgroundColor='transparent'">
-                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
-                                        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(log.account_email)}</div>
-                                        <div style="display: flex; gap: 8px; align-items: center;">
-                                            <span style="font-size: 11px; padding: 3px 8px; background-color: ${typeBgColor}; color: ${typeColor}; border-radius: 4px; font-weight: 500;">${typeText}</span>
-                                            <span style="font-size: 13px; color: ${statusColor}; font-weight: 600;">${statusText}</span>
-                                        </div>
-                                    </div>
-                                    <div style="font-size: 12px; color: #888;">${formatDateTime(log.created_at)}</div>
-                                    ${log.error_message ? `<div style="font-size: 12px; color: #dc3545; margin-top: 6px; padding: 6px; background-color: #fff5f5; border-radius: 4px;">${escapeHtml(log.error_message)}</div>` : ''}
+                        listEl.innerHTML = `
+                            <div class="log-toolbar">
+                                <span>${translateAppTextLocal(`近半年刷新历史（共 ${data.logs.length} 条）`)}</span>
+                            </div>
+                            <div class="log-surface">
+                                <div class="log-list">
+                                    ${data.logs.map(log => {
+                                        const isSuccess = log.status === 'success';
+                                        const statusText = isSuccess ? translateAppTextLocal('成功') : translateAppTextLocal('失败');
+                                        const statusClass = isSuccess ? 'badge-success' : 'badge-danger';
+                                        const typeText = translateAppTextLocal(log.refresh_type === 'manual' ? '手动' : '自动');
+                                        return `
+                                            <div class="log-item">
+                                                <div class="log-main">
+                                                    <div class="log-title log-mono">${escapeHtml(log.account_email)}</div>
+                                                    <div class="log-sub">
+                                                        <span>${formatDateTime(log.created_at)}</span>
+                                                        <span>·</span>
+                                                        <span>${escapeHtml(typeText)}</span>
+                                                    </div>
+                                                    ${log.error_message ? `<div class="log-detail">${escapeHtml(log.error_message)}</div>` : ''}
+                                                </div>
+                                                <div class="log-badge">
+                                                    <span class="badge badge-solid ${statusClass}">${statusText}</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
                                 </div>
-                            `;
-                        });
-                        listEl.innerHTML += html;
+                            </div>
+                        `;
                     }
                     container.style.display = 'block';
                 }
@@ -2836,37 +2858,48 @@ ${details}
                 const data = await response.json();
 
                 if (data.success && data.logs && data.logs.length > 0) {
+                    const countText =
+                        getUiLanguage() === 'en'
+                            ? `Total ${data.logs.length} records`
+                            : `共 ${data.logs.length} 条记录`;
                     container.innerHTML = `
-                        <div style="padding:0.6rem 1rem;font-size:0.78rem;color:var(--text-muted);border-bottom:1px solid var(--border-light);">
-                            ${translateAppTextLocal(`共 ${data.logs.length} 条记录`)}
+                        <div class="log-toolbar">
+                            <span>${escapeHtml(countText)}</span>
                         </div>
-                        <div class="dashboard-list-wrap">
-                            ${data.logs.map(log => {
-                                const isSuccess = log.status === 'success';
-                                const statusBadge = isSuccess
-                                    ? `<span class="badge" style="background:var(--clr-jade);color:white;">${translateAppTextLocal('成功')}</span>`
-                                    : `<span class="badge" style="background:var(--clr-danger);color:white;">${translateAppTextLocal('失败')}</span>`;
-                                const typeText = translateAppTextLocal(
-                                    log.refresh_type === 'manual' ? '手动' : (log.refresh_type === 'scheduled' ? '定时' : (log.refresh_type || '-'))
-                                );
-                                return `
-                                    <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:0.8rem;">
-                                        <div style="flex:1;min-width:0;">
-                                            <div style="font-weight:600;font-size:0.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(log.account_email || '-')}</div>
-                                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${formatDateTime(log.created_at)} · ${escapeHtml(typeText)}</div>
-                                            ${log.error_message ? `<div style="font-size:0.72rem;color:var(--clr-danger);margin-top:4px;padding:4px 8px;background:rgba(185,28,28,0.06);border-radius:4px;">${escapeHtml(log.error_message)}</div>` : ''}
+                        <div class="log-surface">
+                            <div class="log-list">
+                                ${data.logs.map(log => {
+                                    const isSuccess = log.status === 'success';
+                                    const statusText = isSuccess ? translateAppTextLocal('成功') : translateAppTextLocal('失败');
+                                    const statusClass = isSuccess ? 'badge-success' : 'badge-danger';
+                                    const typeText = translateAppTextLocal(
+                                        log.refresh_type === 'manual' ? '手动' : (log.refresh_type === 'scheduled' ? '定时' : (log.refresh_type || '-'))
+                                    );
+                                    return `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-title log-mono">${escapeHtml(log.account_email || '-')}</div>
+                                                <div class="log-sub">
+                                                    <span>${formatDateTime(log.created_at)}</span>
+                                                    <span>·</span>
+                                                    <span>${escapeHtml(typeText)}</span>
+                                                </div>
+                                                ${log.error_message ? `<div class="log-detail">${escapeHtml(log.error_message)}</div>` : ''}
+                                            </div>
+                                            <div class="log-badge">
+                                                <span class="badge badge-solid ${statusClass}">${statusText}</span>
+                                            </div>
                                         </div>
-                                        ${statusBadge}
-                                    </div>
-                                `;
-                            }).join('')}
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `<div class="empty-state"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无刷新记录')}</p></div>`;
+                    container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无刷新记录')}</p></div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载刷新历史失败')}</p></div>`;
+                container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载刷新历史失败')}</p></div>`;
             }
         }
 
@@ -2922,36 +2955,47 @@ ${details}
                 const data = await response.json();
 
                 if (data.success && data.logs && data.logs.length > 0) {
+                    const totalCount = data.total || data.logs.length;
+                    const countText = getUiLanguage() === 'en' ? `Total ${totalCount} records` : `共 ${totalCount} 条记录`;
                     container.innerHTML = `
-                        <div style="padding:0.6rem 1rem;font-size:0.78rem;color:var(--text-muted);border-bottom:1px solid var(--border-light);">
-                            ${translateAppTextLocal(`共 ${data.total || data.logs.length} 条记录`)}
+                        <div class="log-toolbar">
+                            <span>${escapeHtml(countText)}</span>
                         </div>
-                        <div class="dashboard-list-wrap">
-                            ${data.logs.map(log => {
-                                const actionColor = log.action === 'delete' ? 'var(--clr-danger)' : (log.action === 'create' ? 'var(--clr-jade)' : 'var(--clr-primary)');
-                                const actionLabel = translateAppTextLocal(log.action || '-');
-                                const resourceTypeLabel = translateAppTextLocal(log.resource_type || '-');
-                                const detailText = formatAuditDetailText(log.details);
-                                return `
-                                    <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border-light);">
-                                        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:4px;">
-                                            <span class="badge" style="background:${actionColor};color:white;font-size:0.68rem;">${escapeHtml(actionLabel)}</span>
-                                            <span style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(resourceTypeLabel)}</span>
-                                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${formatDateTime(log.created_at)}</span>
+                        <div class="log-surface">
+                            <div class="log-list">
+                                ${data.logs.map(log => {
+                                    const actionLabel = translateAppTextLocal(log.action || '-');
+                                    const resourceTypeLabel = translateAppTextLocal(log.resource_type || '-');
+                                    const detailText = formatAuditDetailText(log.details);
+                                    const actionClass = log.action === 'delete'
+                                        ? 'badge-danger'
+                                        : (log.action === 'create' ? 'badge-success' : 'badge-action');
+                                    return `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-sub" style="margin-top: 0;">
+                                                    <span class="badge badge-solid ${actionClass}">${escapeHtml(actionLabel)}</span>
+                                                    <span>${escapeHtml(resourceTypeLabel)}</span>
+                                                    <span style="margin-left:auto;">${formatDateTime(log.created_at)}</span>
+                                                </div>
+                                                <div class="log-title log-mono" style="margin-top: 0.35rem;">${escapeHtml(log.resource_id || '-')}</div>
+                                                ${detailText ? `<div class="log-detail">${escapeHtml(detailText).substring(0, 200)}</div>` : ''}
+                                                <div class="log-sub">
+                                                    <span>IP: ${escapeHtml(log.user_ip || '-')}</span>
+                                                    ${log.trace_id ? `<span>·</span><span class="log-mono">trace: ${escapeHtml(log.trace_id)}</span>` : ''}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div style="font-size:0.82rem;color:var(--text);">${escapeHtml(log.resource_id || '-')}</div>
-                                        ${detailText ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;word-break:break-all;">${escapeHtml(detailText).substring(0, 200)}</div>` : ''}
-                                        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px;">IP: ${escapeHtml(log.user_ip || '-')} ${log.trace_id ? '· trace: ' + escapeHtml(log.trace_id) : ''}</div>
-                                    </div>
-                                `;
-                            }).join('')}
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `<div class="empty-state"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无审计记录')}</p></div>`;
+                    container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无审计记录')}</p></div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载审计日志失败')}</p></div>`;
+                container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载审计日志失败')}</p></div>`;
             }
         }
 

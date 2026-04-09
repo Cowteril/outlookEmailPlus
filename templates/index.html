@@ -25,28 +25,65 @@
             <nav class="sidebar-nav">
                 <div class="nav-section">概览</div>
                 <button class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
-                    <span class="nav-icon">🏠</span><span>仪表盘</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M4 11.5l8-7 8 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M6.5 10.8V20h11V10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>仪表盘</span>
                 </button>
 
                 <div class="nav-section">邮箱管理</div>
                 <button class="nav-item" data-page="mailbox" onclick="navigate('mailbox')">
-                    <span class="nav-icon">📬</span><span>账号管理</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M4.5 7.5h15a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                            <path d="M5.5 10l6.2 4.2c.9.6 2.2.6 3.1 0L21.5 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>账号管理</span>
                 </button>
                 <button class="nav-item" data-page="temp-emails" onclick="navigate('temp-emails')">
-                    <span class="nav-icon">⚡</span><span>临时邮箱</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M13 2 3.5 14h7.2L9.8 22l10.7-13.6h-7.2L13 2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>临时邮箱</span>
                 </button>
 
                 <div class="nav-section">Token</div>
                 <button class="nav-item" data-page="refresh-log" onclick="navigate('refresh-log')">
-                    <span class="nav-icon">🔄</span><span>刷新日志</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M20 12a8 8 0 0 1-13.7 5.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            <path d="M4 12a8 8 0 0 1 13.7-5.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            <path d="M6.2 18.2H3.9v-2.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M17.8 5.8h2.3v2.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>刷新日志</span>
                 </button>
 
                 <div class="nav-section">系统</div>
                 <button class="nav-item" data-page="settings" onclick="navigate('settings')">
-                    <span class="nav-icon">⚙️</span><span>系统设置</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M19.4 13.1a7.9 7.9 0 0 0 .1-2.2l2-1.6-2-3.5-2.4 1a8.2 8.2 0 0 0-1.9-1.1l-.4-2.6H10l-.4 2.6a8.2 8.2 0 0 0-1.9 1.1l-2.4-1-2 3.5 2 1.6a7.9 7.9 0 0 0 .1 2.2l-2 1.6 2 3.5 2.4-1a8.2 8.2 0 0 0 1.9 1.1l.4 2.6h4.2l.4-2.6a8.2 8.2 0 0 0 1.9-1.1l2.4 1 2-3.5-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>系统设置</span>
                 </button>
                 <button class="nav-item" data-page="audit" onclick="navigate('audit')">
-                    <span class="nav-icon">📋</span><span>审计日志</span>
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M7 3.5h10a2 2 0 0 1 2 2V20a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                            <path d="M9 8h6M9 12h6M9 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span>审计日志</span>
                 </button>
             </nav>
 
@@ -64,7 +101,7 @@
                     </svg>
                     <span>GitHub</span>
                 </a>
-                <button class="btn-theme" id="themeToggleBtn" onclick="toggleTheme()">☀ 浅色模式</button>
+                <button class="btn-theme" id="themeToggleBtn" onclick="toggleTheme()">浅色模式</button>
                 <button class="btn-logout" onclick="logout()">退出登录</button>
             </div>
         </aside>
@@ -88,7 +125,7 @@
 
             <!-- Refresh progress bar (hidden by default) -->
             <div class="refresh-progress-bar" id="refreshProgressBar" style="display:none;">
-                <span>🔄</span>
+                <span aria-hidden="true" style="opacity:0.8;">⟳</span>
                 <span class="progress-text" id="refreshProgressText">正在刷新 Token…</span>
                 <div class="progress-track">
                     <div class="progress-fill" id="refreshProgressFill" style="width:0%"></div>
@@ -121,7 +158,7 @@
                 <div class="dashboard-grid">
                     <div class="card">
                         <div class="card-header">
-                            <div class="card-title">📂 分组概览</div>
+                            <div class="card-title">分组概览</div>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <ul class="dashboard-list" id="dashboardGroupList">
@@ -131,7 +168,7 @@
                     </div>
                     <div class="card">
                         <div class="card-header">
-                            <div class="card-title">🔄 最近刷新</div>
+                            <div class="card-title">最近刷新</div>
                         </div>
                         <div class="card-body" style="padding:0;">
                             <ul class="dashboard-list" id="dashboardRefreshList">
@@ -177,7 +214,7 @@
                                 <span id="currentGroupName">选择分组</span>
                             </span>
                             <div style="display:flex;gap:4px;align-items:center;">
-                                <button id="registerOutlookBtn" class="btn btn-sm" onclick="showGetRefreshTokenModal()" title="通过 OAuth 获取 Token 注册 Outlook 账号" style="display:none;background-color:#0078d4;color:#fff;font-size:0.75rem;padding:3px 8px;border:none;border-radius:4px;cursor:pointer;">🔑 注册</button>
+                                <button id="registerOutlookBtn" class="btn btn-sm btn-primary" onclick="showGetRefreshTokenModal()" title="通过 OAuth 获取 Token 注册 Outlook 账号" style="display:none;">注册</button>
                                 <button class="btn-icon" onclick="showTagManagementModal()" title="管理标签">🏷️</button>
                                 <button class="btn-icon" onclick="showAddAccountModal()" title="导入账号">+</button>
                             </div>
@@ -187,7 +224,7 @@
                         </div>
                         <div style="padding:6px 12px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;font-size:0.78rem;flex-shrink:0;">
                             <label style="color:var(--text-muted);font-weight:500;">排序：</label>
-                            <button class="btn btn-sm sort-btn active" data-sort="refresh_time" onclick="sortAccounts('refresh_time')">🕐 刷新时间</button>
+                            <button class="btn btn-sm sort-btn active" data-sort="refresh_time" onclick="sortAccounts('refresh_time')">刷新时间</button>
                             <button class="btn btn-sm sort-btn" data-sort="email" onclick="sortAccounts('email')">📧 邮箱名</button>
                             <div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
                                 <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll()" style="cursor:pointer;">
@@ -219,8 +256,8 @@
                         <div class="column-header">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div class="email-tabs" id="folderTabs" style="display:none;border:none;">
-                                    <button class="email-tab active" data-folder="inbox" onclick="switchFolder('inbox')">📨 收件箱</button>
-                                    <button class="email-tab" data-folder="junkemail" onclick="switchFolder('junkemail')">⚠️ 垃圾邮件</button>
+                                    <button class="email-tab active" data-folder="inbox" onclick="switchFolder('inbox')">收件箱</button>
+                                    <button class="email-tab" data-folder="junkemail" onclick="switchFolder('junkemail')">垃圾邮件</button>
                                 </div>
                                 <span style="font-size:0.82rem;color:var(--text-muted);" id="emailCount"></span>
                                 <span id="methodTag" style="display:none;" class="badge badge-gray"></span>
@@ -244,19 +281,19 @@
                         <div id="emailBatchActionBar" class="batch-action-bar" style="display:none;">
                             <span id="emailSelectedCount" style="font-size:0.78rem;color:var(--text-muted);">已选 0 项</span>
                             <div style="flex:1;"></div>
-                            <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">🗑️ 删除</button>
+                            <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">删除</button>
                         </div>
                         <div id="emailDetailSection" style="display:none;border-top:1px solid var(--border);">
                             <div class="email-detail-toolbar" id="emailDetailToolbar">
-                                <button class="btn btn-sm btn-ghost" onclick="showEmailList()">← 返回</button>
-                                <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">🔍 全屏查看</button>
-                                <button class="btn btn-sm btn-accent" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
+                                <button class="btn btn-sm btn-ghost" onclick="showEmailList()">返回</button>
+                                <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">全屏查看</button>
+                                <button class="btn btn-sm btn-secondary" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">验证码</button>
                                 <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;margin-left:8px;cursor:pointer;">
                                     <input type="checkbox" id="trustEmailCheckbox" onchange="toggleTrustMode(this)">
                                     <span style="user-select:none;">信任此邮件</span>
                                 </label>
                                 <div style="flex:1;"></div>
-                                <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">🗑️ 删除</button>
+                                <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">删除</button>
                             </div>
                             <div class="email-detail-container" id="emailDetail">
                                 <div class="empty-state">
@@ -338,7 +375,7 @@
                         <div class="column-header">
                             <span class="column-title" id="tempEmailCurrentName" onclick="copyTempEmailCurrent()" title="点击复制邮箱地址" style="cursor:pointer;">选择一个临时邮箱</span>
                             <div style="display:flex;gap:4px;">
-                                <button class="btn btn-sm btn-ghost" id="tempEmailRefreshBtn" onclick="if(currentAccount && isTempEmailGroup) loadTempEmailMessages(currentAccount)" style="display:none;">🔄 获取邮件</button>
+                                <button class="btn btn-sm btn-ghost" id="tempEmailRefreshBtn" onclick="if(currentAccount && isTempEmailGroup) loadTempEmailMessages(currentAccount)" style="display:none;">获取邮件</button>
                             </div>
                         </div>
                         <div class="column-body" id="tempEmailMessageList">
@@ -355,7 +392,7 @@
             <div class="page page-hidden" id="page-refresh-log">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">🔄 刷新日志</div>
+                        <div class="card-title">刷新日志</div>
                     </div>
                     <div class="card-body" id="refreshLogContainer">
                         <div class="loading-overlay"><span class="spinner"></span> 加载中…</div>
@@ -367,7 +404,7 @@
             <div class="page page-hidden" id="page-settings" style="padding: 1.5rem; max-width: 720px;">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">⚙️ 系统设置</div>
+                        <div class="card-title">系统设置</div>
                     </div>
                     <div class="card-body" style="padding: 1.5rem;">
                         <!-- 基础设置 -->
@@ -479,7 +516,7 @@
 
                         <!-- Token 刷新设置 -->
                         <div style="border-top: 1px solid var(--border-light); margin: 1.5rem 0; padding-top: 1.5rem;">
-                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">🔄 Token 刷新设置</h4>
+                            <h4 style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem; color: var(--text);">Token 刷新设置</h4>
                             <div class="form-group">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" id="enableScheduledRefresh" checked>
@@ -585,7 +622,7 @@
                                 <div class="form-hint">这里只配置 Email 渠道的接收邮箱，不会让所有普通邮箱自动发送。</div>
                             </div>
                             <div class="form-group" style="margin-top: 0.5rem;">
-                                <button class="btn btn-outline" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">📨 发送测试邮件</button>
+                                <button class="btn btn-secondary" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">发送测试邮件</button>
                                 <div class="form-hint">按“先保存，再测试”处理；成功语义为“请求已提交，请检查收件箱”。</div>
                             </div>
                         </div>
@@ -613,7 +650,7 @@
                                 <div class="form-hint">范围：10-86400 秒，默认 600 秒（10 分钟）</div>
                             </div>
                             <div class="form-group" style="margin-top: 0.5rem;">
-                                <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">📨 发送测试消息</button>
+                                <button class="btn btn-secondary" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">发送测试消息</button>
                                 <div class="form-hint">验证当前 Telegram 通知通道是否配置正确</div>
                             </div>
                         </div>
@@ -630,7 +667,7 @@
             <div class="page page-hidden" id="page-audit">
                 <div class="card">
                     <div class="card-header">
-                        <div class="card-title">📋 审计日志</div>
+                        <div class="card-title">审计日志</div>
                     </div>
                     <div class="card-body" id="auditLogContainer">
                         <div class="loading-overlay"><span class="spinner"></span> 加载中…</div>
