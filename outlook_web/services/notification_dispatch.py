@@ -9,7 +9,8 @@ from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import notification_state as notification_state_repo
 from outlook_web.repositories import settings as settings_repo
 from outlook_web.repositories import temp_emails as temp_emails_repo
-from outlook_web.services import email_push, gptmail
+from outlook_web.services import email_push
+from outlook_web.services.temp_mail_service import TempMailError, TempMailService
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,10 @@ def _fetch_account_messages(source: dict[str, Any], since: str) -> list[dict[str
                 emails.append(enriched)
         except Exception as exc:
             logger.warning(
-                "[notification_dispatch] account fetch failed source=%s folder=%s err=%s", source["label"], folder, exc
+                "[notification_dispatch] account fetch failed source=%s folder=%s err=%s",
+                source["label"],
+                folder,
+                exc,
             )
             raise
     return emails
@@ -184,9 +188,19 @@ def _fetch_account_messages(source: dict[str, Any], since: str) -> list[dict[str
 
 def _fetch_temp_email_messages(source: dict[str, Any], since: str) -> list[dict[str, Any]]:
     address = source["email"]
-    api_messages = gptmail.get_temp_emails_from_api(address)
-    if api_messages is not None:
-        temp_emails_repo.save_temp_email_messages(address, api_messages)
+
+    # 通过 TempMailService（provider factory）触发远端同步并写入 DB。
+    # 忽略返回值（_message_summary 缺少 content/html_content 字段），
+    # 后续直接从 DB 读取完整行数据。
+    try:
+        TempMailService().list_messages(address, sync_remote=True)
+    except (TempMailError, Exception):
+        logger.warning(
+            "[notification_dispatch] temp email sync failed address=%s",
+            address,
+            exc_info=True,
+        )
+
     messages = temp_emails_repo.get_temp_email_messages(address)
     results: list[dict[str, Any]] = []
     for item in messages:
@@ -275,7 +289,10 @@ def send_business_telegram_notification(
     bot_token: str,
     chat_id: str,
 ) -> None:
-    from outlook_web.services.telegram_push import _build_telegram_message, _send_telegram_message
+    from outlook_web.services.telegram_push import (
+        _build_telegram_message,
+        _send_telegram_message,
+    )
 
     account_email = source.get("account", {}).get("email", source.get("label", ""))
     payload = _build_telegram_message(account_email, message)
@@ -462,7 +479,13 @@ def _build_active_channels_for_source(
     active_channels: list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]] = []
 
     if email_enabled:
-        active_channels.append((CHANNEL_EMAIL, send_business_email_notification, MAX_EMAIL_NOTIFICATIONS_PER_JOB))
+        active_channels.append(
+            (
+                CHANNEL_EMAIL,
+                send_business_email_notification,
+                MAX_EMAIL_NOTIFICATIONS_PER_JOB,
+            )
+        )
 
     if telegram_runtime is not None and source["source_type"] == SOURCE_ACCOUNT:
         active_channels.append(
@@ -517,7 +540,10 @@ def run_notification_dispatch_job(app) -> None:
                 if initialized:
                     initialized_channels.add(channel)
 
-            fetch_plan: dict[str, list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]]] = {}
+            fetch_plan: dict[
+                str,
+                list[tuple[str, Callable[[dict[str, Any], dict[str, Any]], None], int]],
+            ] = {}
             for channel, sender, channel_limit in active_channels:
                 if channel in initialized_channels:
                     continue

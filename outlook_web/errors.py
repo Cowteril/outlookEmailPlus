@@ -16,6 +16,7 @@ _FALLBACK_LOGGER.propagate = False
 
 ERROR_MESSAGE_EN_MAP = {
     "ACCOUNT_NOT_FOUND": "Account not found",
+    "ACCOUNT_AUTH_EXPIRED": "Account authorization has expired. Please re-authorize the account",
     "ACCOUNT_IMPORT_FAILED": "Account import failed",
     "AUTH_REQUIRED": "Authentication required",
     "CSRF_TOKEN_INVALID": "Your session security token expired. Refresh the page and try again.",
@@ -70,6 +71,7 @@ STATUS_MESSAGE_EN_MAP = {
 
 ERROR_MESSAGE_MAP = {
     "ACCOUNT_NOT_FOUND": "账号不存在",
+    "ACCOUNT_AUTH_EXPIRED": "账号授权已失效，请前往「刷新 Token」页面重新授权",
     "CSRF_TOKEN_INVALID": "会话已失效，请刷新页面后重试",
     "EMAIL_NOTIFICATION_RECIPIENT_INVALID": "接收通知邮箱格式无效",
     "EMAIL_NOTIFICATION_RECIPIENT_NOT_CONFIGURED": "请先配置接收通知邮箱",
@@ -133,7 +135,11 @@ def build_export_verify_failure_response(error_message: str):
     }
     code, message, message_en = mapping.get(
         normalized,
-        ("EXPORT_VERIFY_FAILED", normalized or "验证失败，请重试", "Verification failed. Please try again"),
+        (
+            "EXPORT_VERIFY_FAILED",
+            normalized or "验证失败，请重试",
+            "Verification failed. Please try again",
+        ),
     )
     return build_error_response(
         code,

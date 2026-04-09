@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,15 @@ COMPACT_SUMMARY_FIELDS = (
     "latest_verification_folder",
     "latest_verification_received_at",
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_account_email_domain(email: str) -> str:
+    """从邮箱地址提取并规范化域名（小写，去空白）。"""
+    if not email or "@" not in email:
+        return ""
+    return email.rsplit("@", 1)[-1].strip().lower()
 
 
 def _decrypt_account_field(account: Dict[str, Any], field_name: str) -> None:
@@ -178,15 +188,16 @@ def add_account(
         encrypted_refresh_token = encrypt_data(refresh_token) if refresh_token else refresh_token
         encrypted_imap_password = encrypt_data(imap_password) if imap_password else imap_password
         initial_pool_status = "available" if add_to_pool else None
+        email_domain = _normalize_account_email_domain(email_addr)
 
         db.execute(
             """
             INSERT INTO accounts (
                 email, password, client_id, refresh_token,
                 account_type, provider, imap_host, imap_port, imap_password,
-                group_id, remark, pool_status
+                group_id, remark, pool_status, email_domain
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 email_addr,
@@ -201,6 +212,7 @@ def add_account(
                 group_id,
                 remark,
                 initial_pool_status,
+                email_domain,
             ),
         )
         if commit:
@@ -256,6 +268,7 @@ def update_account(
                     group_id = ?,
                     remark = ?,
                     status = ?,
+                    email_domain = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """,
@@ -265,6 +278,7 @@ def update_account(
                     group_id,
                     remark,
                     status,
+                    _normalize_account_email_domain(email_addr),
                     account_id,
                 ),
             )
@@ -288,7 +302,7 @@ def update_account(
             """
             UPDATE accounts
             SET email = ?, password = ?, client_id = ?, refresh_token = ?,
-                group_id = ?, remark = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                group_id = ?, remark = ?, status = ?, email_domain = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         """,
             (
@@ -299,6 +313,7 @@ def update_account(
                 group_id,
                 remark,
                 status,
+                _normalize_account_email_domain(email_addr),
                 account_id,
             ),
         )
@@ -312,10 +327,17 @@ def delete_account_by_id(account_id: int) -> bool:
     """删除邮箱账号"""
     db = get_db()
     try:
-        db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        db.execute("DELETE FROM account_claim_logs WHERE account_id = ?", (account_id,))
+        db.execute("DELETE FROM account_project_usage WHERE account_id = ?", (account_id,))
+        cursor = db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
         db.commit()
-        return True
+        return cursor.rowcount > 0
     except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.exception("delete_account_by_id failed: account_id=%s", account_id)
         return False
 
 
@@ -323,10 +345,12 @@ def delete_account_by_email(email_addr: str) -> bool:
     """根据邮箱地址删除账号"""
     db = get_db()
     try:
-        db.execute("DELETE FROM accounts WHERE email = ?", (email_addr,))
-        db.commit()
-        return True
+        row = db.execute("SELECT id FROM accounts WHERE email = ?", (email_addr,)).fetchone()
+        if not row:
+            return False
+        return delete_account_by_id(int(row["id"]))
     except Exception:
+        logger.exception("delete_account_by_email failed: email=%s", email_addr)
         return False
 
 

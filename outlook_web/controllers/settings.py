@@ -82,6 +82,70 @@ def _coerce_int_range(raw: Any, default: int, *, minimum: int, maximum: int) -> 
     return max(minimum, min(maximum, value))
 
 
+def _parse_temp_mail_domains_input(raw: Any) -> list[dict[str, Any]]:
+    if raw in (None, "", []):
+        return []
+
+    values = raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return []
+        try:
+            values = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            values = [item.strip() for item in text.replace("\r", "\n").split("\n")]
+
+    if not isinstance(values, list):
+        raise ValueError("temp_mail_domains 必须是数组")
+
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in values:
+        if isinstance(item, dict):
+            name = str(item.get("name") or "").strip()
+            enabled = _parse_bool_input(item.get("enabled"), default=True)
+        else:
+            name = str(item or "").strip()
+            enabled = True
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        result.append({"name": name, "enabled": enabled})
+    return result
+
+
+def _parse_temp_mail_prefix_rules_input(raw: Any) -> dict[str, Any]:
+    if raw in (None, "", {}):
+        return {
+            "min_length": 1,
+            "max_length": 32,
+            "pattern": r"^[a-z0-9][a-z0-9._-]*$",
+        }
+
+    value = raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            value = {}
+        else:
+            value = json.loads(text)
+
+    if not isinstance(value, dict):
+        raise ValueError("temp_mail_prefix_rules 必须是对象")
+
+    min_length = _coerce_int_range(value.get("min_length", 1), 1, minimum=1, maximum=64)
+    max_length = _coerce_int_range(value.get("max_length", 32), 32, minimum=min_length, maximum=128)
+    pattern = str(value.get("pattern") or r"^[a-z0-9][a-z0-9._-]*$").strip()
+    if not pattern:
+        pattern = r"^[a-z0-9][a-z0-9._-]*$"
+    return {
+        "min_length": min_length,
+        "max_length": max_length,
+        "pattern": pattern,
+    }
+
+
 def _is_valid_notification_email(value: str) -> bool:
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value or ""))
 
@@ -132,13 +196,17 @@ def api_get_settings() -> Any:
         "enable_auto_polling": all_settings.get("enable_auto_polling", "false") == "true",
         "polling_interval": int(all_settings.get("polling_interval", "10")),
         "polling_count": int(all_settings.get("polling_count", "5")),
+        # [Phase 3 deprecated] 简洁模式自动轮询配置 — 保留读取，向后兼容
+        "enable_compact_auto_poll": all_settings.get("enable_compact_auto_poll", "false") == "true",
+        "compact_poll_interval": int(all_settings.get("compact_poll_interval", "10")),
+        "compact_poll_max_count": int(all_settings.get("compact_poll_max_count", "5")),
         "email_notification_enabled": all_settings.get("email_notification_enabled", "false").lower() == "true",
         "email_notification_recipient": all_settings.get("email_notification_recipient", ""),
     }
 
     # 敏感字段：不返回明文/哈希，仅提供"是否已设置/脱敏展示"
     login_password_value = all_settings.get("login_password") or ""
-    gptmail_api_key_value = all_settings.get("gptmail_api_key") or ""
+    temp_mail_api_key_value = settings_repo.get_temp_mail_api_key()
     external_api_key_value = settings_repo.get_external_api_key()
     external_api_keys = external_api_keys_repo.list_external_api_keys(include_disabled=True)
     usage_summary = external_api_keys_repo.get_external_api_usage_summary(
@@ -158,8 +226,23 @@ def api_get_settings() -> Any:
         )
     safe_settings["login_password_set"] = bool(login_password_value)
     safe_settings["allow_login_password_change"] = config.get_allow_login_password_change()
-    safe_settings["gptmail_api_key_set"] = bool(gptmail_api_key_value)
-    safe_settings["gptmail_api_key_masked"] = _mask_secret_value(gptmail_api_key_value) if gptmail_api_key_value else ""
+    safe_settings["temp_mail_provider"] = settings_repo.get_temp_mail_provider()
+    safe_settings["temp_mail_provider_label"] = "temp_mail"
+    safe_settings["temp_mail_api_base_url"] = settings_repo.get_temp_mail_api_base_url()
+    safe_settings["temp_mail_api_key_set"] = bool(temp_mail_api_key_value)
+    safe_settings["temp_mail_api_key_masked"] = _mask_secret_value(temp_mail_api_key_value) if temp_mail_api_key_value else ""
+    safe_settings["temp_mail_domains"] = settings_repo.get_temp_mail_domains()
+    safe_settings["temp_mail_default_domain"] = settings_repo.get_temp_mail_default_domain()
+    safe_settings["temp_mail_prefix_rules"] = settings_repo.get_temp_mail_prefix_rules()
+    # v0.3: CF Worker 独立域名配置（Tab 重构）
+    safe_settings["cf_worker_domains"] = settings_repo.get_cf_worker_domains()
+    safe_settings["cf_worker_default_domain"] = settings_repo.get_cf_worker_default_domain()
+    safe_settings["cf_worker_prefix_rules"] = settings_repo.get_cf_worker_prefix_rules()
+    # Cloudflare Worker 独立配置（与 GPTMail 设置隔离）
+    cf_admin_key_value = settings_repo.get_cf_worker_admin_key()
+    safe_settings["cf_worker_base_url"] = settings_repo.get_cf_worker_base_url()
+    safe_settings["cf_worker_admin_key_set"] = bool(cf_admin_key_value)
+    safe_settings["cf_worker_admin_key_masked"] = _mask_secret_value(cf_admin_key_value) if cf_admin_key_value else ""
     safe_settings["external_api_key_set"] = bool(external_api_key_value)
     safe_settings["external_api_key_masked"] = _mask_secret_value(external_api_key_value) if external_api_key_value else ""
     safe_settings["external_api_keys"] = external_api_keys
@@ -195,6 +278,24 @@ def api_get_settings() -> Any:
         minimum=10,
         maximum=86400,
     )
+    safe_settings["telegram_proxy_url"] = settings_repo.get_telegram_proxy_url()
+
+    # Watchtower 一键更新配置
+    wt_url_raw = all_settings.get("watchtower_url", "")
+    safe_settings["watchtower_url"] = wt_url_raw or ""
+    wt_token_raw = all_settings.get("watchtower_token", "")
+    if wt_token_raw and is_encrypted(wt_token_raw):
+        try:
+            plain_token = decrypt_data(wt_token_raw)
+            safe_settings["watchtower_token"] = "****" + plain_token[-4:] if len(plain_token) > 4 else "****"
+        except Exception:
+            safe_settings["watchtower_token"] = "****"
+    else:
+        safe_settings["watchtower_token"] = ""
+
+    # 更新方式配置（watchtower / docker_api）
+    update_method = all_settings.get("update_method", "watchtower")
+    safe_settings["update_method"] = update_method if update_method in ["watchtower", "docker_api"] else "watchtower"
 
     # 读取 ui_layout_v2 布局状态
     ui_layout = settings_repo.get_ui_layout_v2()
@@ -313,19 +414,124 @@ def api_update_settings() -> Any:
                 queue_setting_update("login_password", hashed_password)
                 updated.append("登录密码")
 
-    # 更新 GPTMail API Key
+    # 更新临时邮箱配置
+    if "temp_mail_provider" in data:
+        try:
+            provider = settings_repo.validate_temp_mail_provider_name(data["temp_mail_provider"])
+        except ValueError:
+            return _json_error(
+                "TEMP_MAIL_PROVIDER_INVALID",
+                "临时邮箱 Provider 配置无效",
+                status=400,
+                message_en="Invalid temp mail provider",
+            )
+        queue_setting_update("temp_mail_provider", provider)
+        updated.append("临时邮箱 Provider")
+
+    if "temp_mail_api_base_url" in data:
+        queue_setting_update("temp_mail_api_base_url", str(data["temp_mail_api_base_url"] or "").strip())
+        updated.append("临时邮箱 API 地址")
+
+    if "temp_mail_api_key" in data:
+        new_api_key = str(data["temp_mail_api_key"] or "").strip()
+        existing_api_key = settings_repo.get_temp_mail_api_key()
+        if new_api_key and existing_api_key and new_api_key == _mask_secret_value(existing_api_key):
+            updated.append("临时邮箱 API Key（未变更）")
+        elif new_api_key:
+            queue_setting_update("temp_mail_api_key", new_api_key)
+            queue_setting_update("gptmail_api_key", new_api_key)
+            updated.append("临时邮箱 API Key")
+        else:
+            updated.append("临时邮箱 API Key（空值已忽略）")
+
+    if "temp_mail_domains" in data:
+        try:
+            domains = _parse_temp_mail_domains_input(data["temp_mail_domains"])
+            queue_setting_update("temp_mail_domains", json.dumps(domains, ensure_ascii=False))
+            updated.append("临时邮箱可用域名")
+        except ValueError as exc:
+            errors.append(str(exc))
+        except (TypeError, json.JSONDecodeError):
+            errors.append("temp_mail_domains 格式无效")
+
+    if "temp_mail_default_domain" in data:
+        queue_setting_update(
+            "temp_mail_default_domain",
+            str(data["temp_mail_default_domain"] or "").strip(),
+        )
+        updated.append("临时邮箱默认域名")
+
+    if "temp_mail_prefix_rules" in data:
+        try:
+            prefix_rules = _parse_temp_mail_prefix_rules_input(data["temp_mail_prefix_rules"])
+            queue_setting_update("temp_mail_prefix_rules", json.dumps(prefix_rules, ensure_ascii=False))
+            updated.append("临时邮箱前缀规则")
+        except ValueError as exc:
+            errors.append(str(exc))
+        except (TypeError, json.JSONDecodeError):
+            errors.append("temp_mail_prefix_rules 格式无效")
+
+    # v0.3: CF Worker 独立域名配置（Tab 重构）
+    if "cf_worker_domains" in data:
+        try:
+            domains = _parse_temp_mail_domains_input(data["cf_worker_domains"])
+            queue_setting_update("cf_worker_domains", json.dumps(domains, ensure_ascii=False))
+            updated.append("CF Worker 可用域名")
+        except ValueError as exc:
+            errors.append(str(exc))
+        except (TypeError, json.JSONDecodeError):
+            errors.append("cf_worker_domains 格式无效")
+
+    if "cf_worker_default_domain" in data:
+        queue_setting_update(
+            "cf_worker_default_domain",
+            str(data["cf_worker_default_domain"] or "").strip(),
+        )
+        updated.append("CF Worker 默认域名")
+
+    if "cf_worker_prefix_rules" in data:
+        try:
+            cf_prefix_rules = _parse_temp_mail_prefix_rules_input(data["cf_worker_prefix_rules"])
+            queue_setting_update(
+                "cf_worker_prefix_rules",
+                json.dumps(cf_prefix_rules, ensure_ascii=False),
+            )
+            updated.append("CF Worker 前缀规则")
+        except ValueError as exc:
+            errors.append(str(exc))
+        except (TypeError, json.JSONDecodeError):
+            errors.append("cf_worker_prefix_rules 格式无效")
+
+    # Cloudflare Worker 独立配置（与 GPTMail 设置完全隔离）
+    if "cf_worker_base_url" in data:
+        queue_setting_update("cf_worker_base_url", str(data["cf_worker_base_url"] or "").strip())
+        updated.append("CF Worker 地址")
+
+    if "cf_worker_admin_key" in data:
+        new_cf_key = str(data["cf_worker_admin_key"] or "").strip()
+        existing_cf_key = settings_repo.get_cf_worker_admin_key()
+        if new_cf_key and existing_cf_key and new_cf_key == _mask_secret_value(existing_cf_key):
+            updated.append("CF Worker Admin Key（未变更）")
+        elif new_cf_key:
+            # 加密存储（与 telegram_bot_token / external_api_key 保持一致）
+            encrypted_cf_key = encrypt_data(new_cf_key)
+            queue_setting_update("cf_worker_admin_key", encrypted_cf_key)
+            updated.append("CF Worker Admin Key")
+        else:
+            updated.append("CF Worker Admin Key（空值已忽略）")
+
+    # 更新 gptmail_api_key（兼容旧字段）
     if "gptmail_api_key" in data:
         new_api_key = str(data["gptmail_api_key"] or "").strip()
-        existing_api_key = settings_repo.get_setting("gptmail_api_key", "") or ""
+        existing_api_key = settings_repo.get_temp_mail_api_key()
         if new_api_key and existing_api_key and new_api_key == _mask_secret_value(existing_api_key):
-            updated.append("GPTMail API Key（未变更）")
+            updated.append("兼容旧版临时邮箱 API Key 字段（未变更）")
         elif new_api_key:
             queue_setting_update("gptmail_api_key", new_api_key)
-            updated.append("GPTMail API Key")
+            updated.append("兼容旧版临时邮箱 API Key 字段（已更新）")
         else:
-            # 允许清空（用于禁用临时邮箱能力）
-            queue_setting_update("gptmail_api_key", "")
-            updated.append("GPTMail API Key（已清空）")
+            # legacy 字段仅做兼容，不允许空值反向清空正式 temp_mail_api_key。
+            updated.append("兼容旧版临时邮箱 API Key 字段（空值已忽略）")
 
     # 更新对外开放 API Key（建议加密存储）
     if "external_api_key" in data:
@@ -584,8 +790,8 @@ def api_update_settings() -> Any:
     if "polling_interval" in data:
         try:
             interval = int(data["polling_interval"])
-            if interval < 5 or interval > 300:
-                errors.append("轮询间隔必须在 5-300 秒之间")
+            if interval < 3 or interval > 300:
+                errors.append("轮询间隔必须在 3-300 秒之间")
             else:
                 queue_setting_update("polling_interval", str(interval))
                 updated.append("轮询间隔")
@@ -602,6 +808,37 @@ def api_update_settings() -> Any:
                 updated.append("轮询次数")
         except ValueError:
             errors.append("轮询次数必须是数字")
+
+    # [Phase 3 deprecated] 简洁模式自动轮询配置 — 保留写入，向后兼容
+    if "enable_compact_auto_poll" in data:
+        enable_compact = str(data["enable_compact_auto_poll"]).lower()
+        if enable_compact in ("true", "false"):
+            queue_setting_update("enable_compact_auto_poll", enable_compact)
+            updated.append("简洁轮询开关")
+        else:
+            errors.append("简洁模式自动轮询开关必须是 true 或 false")
+
+    if "compact_poll_interval" in data:
+        try:
+            compact_interval = int(data["compact_poll_interval"])
+            if compact_interval < 3 or compact_interval > 60:
+                errors.append("简洁模式轮询间隔必须在 3-60 秒之间")
+            else:
+                queue_setting_update("compact_poll_interval", str(compact_interval))
+                updated.append("简洁轮询间隔")
+        except (ValueError, TypeError):
+            errors.append("简洁模式轮询间隔必须是数字")
+
+    if "compact_poll_max_count" in data:
+        try:
+            compact_max_count = int(data["compact_poll_max_count"])
+            if compact_max_count < 0 or compact_max_count > 100:
+                errors.append("简洁模式最多轮询次数必须在 0-100 之间")
+            else:
+                queue_setting_update("compact_poll_max_count", str(compact_max_count))
+                updated.append("简洁轮询次数")
+        except (ValueError, TypeError):
+            errors.append("简洁模式最多轮询次数必须是数字")
 
     # Telegram 推送配置
     if "telegram_poll_interval" in data:
@@ -633,6 +870,39 @@ def api_update_settings() -> Any:
         tg_chat_id = str(data["telegram_chat_id"]).strip()
         queue_setting_update("telegram_chat_id", tg_chat_id)
         updated.append("Telegram Chat ID")
+
+    if "telegram_proxy_url" in data:
+        tg_proxy = str(data["telegram_proxy_url"]).strip()
+        queue_setting_update("telegram_proxy_url", tg_proxy)
+        updated.append("Telegram 代理地址")
+
+    # Watchtower 一键更新配置
+    if "watchtower_url" in data:
+        wt_url = str(data["watchtower_url"]).strip()
+        queue_setting_update("watchtower_url", wt_url)
+        updated.append("Watchtower URL")
+
+    if "watchtower_token" in data:
+        wt_token = str(data["watchtower_token"]).strip()
+        if wt_token and wt_token != "" and not wt_token.startswith("****"):
+            encrypted_wt_token = encrypt_data(wt_token)
+            queue_setting_update("watchtower_token", encrypted_wt_token)
+            updated.append("Watchtower Token")
+        elif not wt_token:
+            queue_setting_update("watchtower_token", "")
+            updated.append("Watchtower Token（已清空）")
+        else:
+            # 脱敏占位符（****xxx），跳过不覆盖
+            updated.append("Watchtower Token（未变更）")
+
+    # 更新方式配置（watchtower / docker_api）
+    if "update_method" in data:
+        method = str(data["update_method"]).strip().lower()
+        if method in ["watchtower", "docker_api"]:
+            queue_setting_update("update_method", method)
+            updated.append("更新方式")
+        else:
+            errors.append(f"不支持的更新方式: {method} （仅支持 watchtower / docker_api）")
 
     # 更新 ui_layout_v2 布局状态
     if "ui_layout_v2" in data:
@@ -812,6 +1082,106 @@ def api_test_email() -> Any:
 
 
 @login_required
+def api_sync_cf_worker_domains() -> Any:
+    """
+    从 CF Worker 的 /open_api/settings 接口同步域名列表到本地配置。
+
+    成功后自动写入：
+    - cf_worker_domains：CF Worker 上配置的所有域名（v0.3: 独立 key，不覆盖 GPTMail）
+    - cf_worker_default_domain：CF Worker 的默认域名（defaultDomains 第一个）
+
+    返回：{"success": True, "domains": [...], "default_domain": "...", "message": "..."}
+    """
+    from outlook_web.services.temp_mail_provider_cf import CloudflareTempMailProvider
+    from outlook_web.services.temp_mail_provider_factory import (
+        TempMailProviderFactoryError,
+    )
+
+    cf_base_url = settings_repo.get_cf_worker_base_url()
+    if not cf_base_url:
+        return _json_error(
+            "CF_WORKER_NOT_CONFIGURED",
+            "请先配置 CF Worker 地址（cf_worker_base_url）",
+            status=400,
+        )
+
+    try:
+        provider = CloudflareTempMailProvider()
+        result = provider.get_cf_worker_domains()
+    except Exception as exc:
+        return _json_error(
+            "CF_WORKER_SYNC_FAILED",
+            f"CF Worker 域名同步失败: {exc}",
+            status=502,
+        )
+
+    if not result.get("success"):
+        return _json_error(
+            result.get("error_code") or "CF_WORKER_SYNC_FAILED",
+            result.get("error") or "CF Worker 域名同步失败",
+            status=502,
+        )
+
+    domains: list[str] = result.get("domains") or []
+    default_domain: str = result.get("default_domain") or ""
+
+    if not domains:
+        return _json_error(
+            "CF_WORKER_NO_DOMAINS",
+            "CF Worker 未返回任何域名，请检查 CF Worker 配置",
+            status=502,
+        )
+
+    # 构建 cf_worker_domains 格式（带 enabled/is_default 标记）
+    # v0.3: 同步到独立的 cf_worker_* key，不覆盖 GPTMail 的 temp_mail_* key
+    domains_payload = [
+        {
+            "name": d,
+            "enabled": True,
+        }
+        for d in domains
+    ]
+    db = get_db()
+    try:
+        db.execute("BEGIN")
+        settings_repo.set_setting(
+            "cf_worker_domains",
+            __import__("json").dumps(domains_payload, ensure_ascii=False),
+            commit=False,
+        )
+        if default_domain:
+            settings_repo.set_setting("cf_worker_default_domain", default_domain, commit=False)
+        db.commit()
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return _json_error(
+            "INTERNAL_ERROR",
+            f"域名同步写入失败: {exc}",
+            status=500,
+        )
+
+    log_audit(
+        "sync",
+        "settings",
+        None,
+        f"cf_worker_domains_synced domains={','.join(domains)} default={default_domain}",
+    )
+    return jsonify(
+        {
+            "success": True,
+            "domains": domains,
+            "default_domain": default_domain,
+            "title": result.get("title") or "",
+            "version": result.get("version") or "",
+            "message": f"已同步 {len(domains)} 个域名，默认域名：{default_domain or '（未指定）'}",
+        }
+    )
+
+
+@login_required
 def api_test_telegram() -> Any:
     """发送 Telegram 测试消息，验证 bot_token + chat_id 配置是否正确"""
     from outlook_web.services.telegram_push import _send_telegram_message
@@ -843,3 +1213,58 @@ def api_test_telegram() -> Any:
         "发送失败，请检查 Bot Token 和 Chat ID 是否正确",
         message_en="Failed to send test message. Please check whether the Bot Token and Chat ID are correct",
     )
+
+
+@login_required
+def api_test_telegram_proxy() -> Any:
+    """测试 Telegram 代理连通性：用指定代理实际请求 api.telegram.org/getMe"""
+    import time
+
+    import requests as req
+
+    from outlook_web.services.graph import build_proxies
+
+    data = request.get_json(silent=True) or {}
+    proxy_url = str(data.get("proxy_url", "")).strip()
+
+    bot_token = settings_repo.get_telegram_bot_token()
+    if not bot_token:
+        return _json_error(
+            "TELEGRAM_NOT_CONFIGURED",
+            "请先配置 Telegram Bot Token",
+            message_en="Please configure Telegram Bot Token first",
+        )
+
+    proxies = build_proxies(proxy_url) if proxy_url else None
+    test_url = f"https://api.telegram.org/bot{bot_token}/getMe"
+    t0 = time.monotonic()
+    try:
+        resp = req.get(test_url, proxies=proxies, timeout=10)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        if resp.ok:
+            return jsonify(
+                {
+                    "success": True,
+                    "ok": True,
+                    "message": "代理连通成功",
+                    "latency_ms": latency_ms,
+                }
+            )
+        return jsonify(
+            {
+                "success": True,
+                "ok": False,
+                "message": f"代理可达但 Telegram 返回错误 HTTP {resp.status_code}",
+                "latency_ms": latency_ms,
+            }
+        )
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        return jsonify(
+            {
+                "success": True,
+                "ok": False,
+                "message": f"连接失败：{exc}",
+                "latency_ms": latency_ms,
+            }
+        )

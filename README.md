@@ -1,7 +1,6 @@
 # Outlook Email Plus
 
-
-[English](./README.en.md)
+[English](./README.en.md) · [发布流程](./RELEASE.md)
 
 OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
@@ -11,19 +10,20 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
 - **专为注册而生**：尽量减少注册流程中不必要的操作。你可以一键复制邮箱地址；在注册页发送验证邮件后，回到管理器点击“验证码”，即可自动拉取最新验证邮件，并用正则快速提取验证码或验证链接，尽量减少等待。
 - **更轻、更专注**：舍弃发件等非核心能力，界面更清爽，所有设计都围绕“把注册跑通”。
-- **导入兼容更广**：支持主流邮箱导入（Gmail、QQ、163 等），也支持自定义 IMAP 服务器。即使是自建邮箱也能使用；同时内置临时邮箱，降低隐私泄露风险。
-- **支持自动化**：对外提供接口，支持批量自动化注册流程，获取邮箱接码与释放邮箱等能力一应俱全。
+- **导入兼容更广**：支持主流邮箱导入（Gmail、QQ、163 等），也支持自定义 IMAP 服务器。即使是自建邮箱也能使用；内置 CF Worker 临时邮箱，支持多域配置与 Admin Key 加密，大幅降低注册场景的隐私泄露风险。
+- **支持自动化**：对外提供接口，支持批量自动化注册流程；邮箱池支持项目隔离策略，同一项目内已使用的邮箱不会被重复分配，获取接码与释放邮箱等能力一应俱全。
 - **第三方通知**：支持第三方渠道通知，当前已接入 Telegram；重点邮箱收到邮件可自动推送提醒。
 
 简而言之，OutlookMail Plus 是一款为“注册流程”打造的邮箱管理器。
 
 ## 演示站点
-演示站点：https://gbcoinystsyz.ap-southeast-1.clawcloudrun.com
-登录密码：12345678
 
-实际上我提供了10个邮箱账号作为演示使用，不建议某些人单独尝试删除，我会定时把这个账号的内容信息上传，不建议自己使用，除非你想要让它对你造成不良影响
+演示站点：https://demo.outlookmailplus.tech/
+登录密码：`12345678`
 
-基本都涵盖了本项目的所有功能（除了邮件推送，纸飞机推送需要具体的配置没有添加）
+站点内置 10 个邮箱账号用于演示，数据会定期重置。请勿删除演示账号或将其用于个人用途。
+
+演示涵盖本项目的主要功能（Telegram 推送因需要额外配置，演示站未启用）。
 
 
 
@@ -42,28 +42,51 @@ OutlookMail Plus 是一款面向个人与团队的注册邮箱管理器。
 
 重点包括：
 
-- 当前稳定版本：`v1.10.0`
-- 新增账号管理“简洁模式”，支持高密度列表、摘要列和标准/简洁模式状态同步
-- 新增备注轻量编辑链路，可直接通过独立 `PATCH` 接口更新备注而不改动账号凭据
-- 新增临时邮箱富内容展示，支持 `cid:` 内联图片、data URL 和远程图片地址
-- 新增按账号类型生成的刷新失败建议，Outlook OAuth 与 IMAP 场景的提示更准确
-- 中英双语界面与更完整的 i18n 覆盖
-- 统一通知分发能力：邮件通知与 Telegram 推送共存
-- 受控外部接口增强：单 Key、多 Key、白名单、限流、危险端点禁用
-- 邮箱池外部集成统一收敛到 `/api/external/pool/*`
-- 旧匿名 `/api/pool/*` 端点已移除
-- 新增演示站点保护开关：可禁止在设置页修改登录密码
+- 当前稳定版本：`v1.14.0`
+
+**一键更新**
+- 支持两种更新方式：Watchtower（推荐）和 Docker API 自更新（高级）
+- 自动检测 GitHub 最新版本，界面弹出更新提示
+- 完整的部署信息检测：镜像标签、本地构建、Watchtower 连通性等
+- Watchtower 已是最新版本智能检测（基于 Watchtower 同步行为）
+- Docker API 模式 digest 预检查，相同版本不触发无效更新
+- 修复了浏览器缓存旧 JS 文件的问题
+
+**邮箱池增强**
+- 项目隔离领取策略（PR#27）：`claim-random` 支持传入 `project_key`，同一 `caller_id + project_key` 下已使用的账号不重复领取（DB v17）
+
+**CF Worker 临时邮箱**
+- 多域支持：可在设置页配置多个 CF Worker 域名，新增"同步域名"按钮一键刷新域名列表
+- Admin Key 加密存储：`cf_worker_admin_key` 以 `enc:` 前缀加密写入数据库，不再明文存储（DB v18）
+- 临时邮箱页域名联动修复：`/api/temp-emails/options` 支持按 `provider_name` 返回配置，切换到 CF provider 后可正确展示 CF 域名下拉
+- 自动同步兜底（v0.3.1）：当 `cf_worker_domains` 为空但 `cf_worker_base_url` 已配置时，系统会自动从 CF Worker 拉取 domains 并写回本地配置
+- 配置注意：`cf_worker_admin_key` 必须与 Worker 的 ADMIN_PASSWORDS 一致；不一致时创建邮箱会返回 `UNAUTHORIZED`
+
+**前端体验修复**
+- BUG-06：生成或删除临时邮箱后，列表中已选中邮箱的高亮状态得到正确保留
+- BUG-07：临时邮箱面板刷新邮件列表后，域名下拉选择不再被重置
+- Issue #24：修复邮件展开/激活状态在重渲染后丢失、i18n 语言切换后账号列表不刷新、视口高度链路断裂等问题
+
+**轮询引擎重构**
+- 将标准模式和简洁模式的双轮询系统合并为统一的 `poll-engine`（4 阶段重构）
+- 修复初始加载时批量邮件请求、分组切换重复启动轮询、跨视图轮询状态积压等问题
+
+**账号列表**
+- 新增前端分页（每页 50 条），大量账号时列表加载更流畅
+
+**i18n**
+- 临时邮箱面板域名提示文字、CF Worker 域名同步按钮新增中英双语翻译
 
 ## 核心能力
 
 - 多邮箱账号管理
-  支持 Outlook OAuth、普通 IMAP 邮箱和 GPTMail 临时邮箱
+  支持 Outlook OAuth、普通 IMAP 邮箱和 CF Worker 临时邮箱（多域配置，Admin Key 加密存储）
 - 批量导入与分组整理
   支持批量导入、标签、搜索、分组、导出
 - 邮件读取与提取
   支持验证码、链接、原文内容读取
 - 邮箱池调度
-  支持可领取、释放、完成、冷却恢复、过期回收等状态流转
+  支持可领取、释放、完成、冷却恢复、过期回收等状态流转；支持 `project_key` 项目隔离，同项目内已用邮箱不重复分配；`claim-random` 支持 `provider=cloudflare_temp_mail` 且池空时动态创建 CF 邮箱
 - 受控对外接口
   支持 `X-API-Key` 鉴权、多调用方 Key 管理、邮箱范围授权、IP 白名单和速率限制
 - 通知能力
@@ -86,10 +109,9 @@ web_outlook_app.py    兼容入口
 
 ### Docker 部署
 
-```bash
-docker pull guangshanshui/outlook-email-plus:v1.10.0
-docker pull guangshanshui/outlook-email-plus:latest
+**方式一：docker run（快速体验）**
 
+```bash
 docker run -d \
   --name outlook-email-plus \
   -p 5000:5000 \
@@ -97,14 +119,77 @@ docker run -d \
   -e SECRET_KEY=your-secret-key-here \
   -e LOGIN_PASSWORD=your-login-password \
   -e ALLOW_LOGIN_PASSWORD_CHANGE=false \
-  guangshanshui/outlook-email-plus:v1.10.0
+  guangshanshui/outlook-email-plus:latest
+```
+
+**方式二：docker-compose（推荐，含一键更新）**
+
+保存以下内容为 `docker-compose.yml`，然后运行 `docker-compose up -d`：
+
+```yaml
+services:
+  app:
+    image: ghcr.io/zeropointsix/outlook-email-plus:latest   # 推荐（国内网络稳定）
+    # image: guangshanshui/outlook-email-plus:latest         # Docker Hub 备选
+    container_name: outlook-email-plus
+    restart: unless-stopped
+    ports:
+      - "5001:5000"           # 可改为 5000:5000 或其他端口
+    env_file:
+      - .env
+    environment:
+      SECRET_KEY: "${SECRET_KEY:?请在 .env 中设置 SECRET_KEY}"
+      # 一键更新 Token：留空即可直接使用内置默认值；生产环境建议设为随机强密码
+      WATCHTOWER_HTTP_API_TOKEN: "${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}"
+      # Docker API 自更新（可选，高级功能）
+      # ⚠️ 启用后容器可通过 Docker API 控制宿主机其他容器，存在安全风险
+      # DOCKER_SELF_UPDATE_ALLOW: "false"
+    volumes:
+      - ./data:/app/data
+      # Docker socket 挂载（可选，仅用于 Docker API 自更新功能）
+      # ⚠️ 挂载 docker.sock 会授予容器完全的 Docker API 访问权限，请谨慎使用
+      # - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - outlook-net
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # 与上方 app 服务保持一致；留空时两边同步使用内置默认值，无需手动对齐
+      - WATCHTOWER_HTTP_API_TOKEN=${WATCHTOWER_HTTP_API_TOKEN:-outlook-mail-plus-watchtower-default}
+      - WATCHTOWER_HTTP_API_UPDATE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_HTTP_API_PERIODIC_POLLS=false
+    command: --http-api-update --label-enable
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      - outlook-net
+
+networks:
+  outlook-net:
+    driver: bridge
 ```
 
 说明：
 
 - 建议始终挂载 `data/`，避免数据库与运行数据丢失
-- `SECRET_KEY` 必须稳定且足够强，建议随机64位
-- 生产环境建议优先固定到明确版本标签，例如 `v1.10.0`；`latest` 更适合快速体验
+- `SECRET_KEY` 必须稳定且足够强，建议随机64位：`python -c "import secrets; print(secrets.token_hex(32))"`
+- `WATCHTOWER_HTTP_API_TOKEN` **可留空**，留空时 app 和 watchtower 自动使用同一内置默认值，部署后一键更新即可使用
+- 配置好后，当有新版本时系统界面会自动弹出更新提示，点击"立即更新"即可完成升级
+- 一键更新功能**仅在 docker-compose 部署方式下有效**；`docker run` 单容器模式不支持
+
+**更新方式**：默认使用 Watchtower（推荐）。如需使用 Docker API 自更新（无需 Watchtower），需在 `docker-compose.yml` 中：
+1. 取消 `DOCKER_SELF_UPDATE_ALLOW` 注释并设为 `"true"`
+2. 取消 docker.sock 挂载注释
+3. 在设置页选择"更新方式"为"Docker API"
+4. ⚠️ 请充分了解安全风险后再启用
 
 ### 本地运行
 
@@ -148,6 +233,23 @@ python -m unittest discover -s tests -v
   GPTMail 服务地址
 - `GPTMAIL_API_KEY`
   GPTMail API Key，用于临时邮箱能力
+- `CF_WORKER_BASE_URL`（设置页对应 `cf_worker_base_url`）
+  Cloudflare Temp Email Worker 地址
+- `CF_WORKER_ADMIN_KEY`（设置页对应 `cf_worker_admin_key`）
+  Cloudflare Worker Admin 密码；建议仅通过设置页保存，系统会加密存储
+
+### 一键更新相关
+
+- `WATCHTOWER_HTTP_API_TOKEN`
+  Watchtower API 鉴权令牌。**可留空**，留空时 app 和 watchtower 两边自动使用同一内置默认值，开箱即用；生产环境建议设置随机强密码
+- `WATCHTOWER_API_URL`
+  Watchtower API 地址，默认 `http://watchtower:8080`（Docker 内部网络，通常无需修改）
+- `DOCKER_SELF_UPDATE_ALLOW`
+  是否启用 Docker API 自更新功能，默认 `false`。⚠️ 启用后容器可访问 Docker API，存在安全风险
+- `DOCKER_IMAGE`
+  当前容器镜像名（可选，用于部署信息检测）
+
+> **安全提示**：Docker API 自更新需要挂载 `/var/run/docker.sock`，这会授予容器完全的 Docker API 访问权限。生产环境建议使用 Watchtower 方式。
 
 ## 通知能力说明
 
@@ -285,3 +387,7 @@ python worker.py
 ## 许可证
 
 Apache License 2.0
+
+## 联系方式
+
+如果你在使用过程中遇到问题，或有合作意向，欢迎通过邮件联系：[outlookmailplus@163.com](mailto:outlookmailplus@163.com)

@@ -107,6 +107,11 @@ def create_blueprint() -> Blueprint:
         view_func=accounts_controller.api_trigger_scheduled_refresh,
         methods=["GET"],
     )
+    bp.add_url_rule(
+        "/api/accounts/refresh/selected",
+        view_func=accounts_controller.api_refresh_selected_accounts,
+        methods=["POST"],
+    )
 
     # 刷新日志（已迁移到 controllers）
     bp.add_url_rule(

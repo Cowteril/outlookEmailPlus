@@ -94,7 +94,15 @@ def _build_telegram_message(account_email: str, email: dict) -> str:
 
 
 def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
-    """调用 Telegram sendMessage API。超时 10 秒，失败返回 False。"""
+    """调用 Telegram sendMessage API。超时 10 秒，失败返回 False。
+    自动读取系统 telegram_proxy_url 设置并透传给 requests。
+    """
+    from outlook_web.repositories import settings as settings_repo
+    from outlook_web.services.graph import build_proxies
+
+    proxy_url = settings_repo.get_telegram_proxy_url()
+    proxies = build_proxies(proxy_url) if proxy_url else None
+
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
         resp = requests.post(
@@ -106,6 +114,7 @@ def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> bool:
                 "disable_web_page_preview": True,
             },
             timeout=10,
+            proxies=proxies,
         )
         if not resp.ok:
             logger.warning("[telegram_push] send HTTP %s: %s", resp.status_code, resp.text[:200])
@@ -304,12 +313,20 @@ def _fetch_new_emails_imap(account: dict, since: str, folder: str = "inbox") -> 
                         if ct == "text/plain":
                             payload = part.get_payload(decode=True)
                             if payload:
-                                body = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+                                body = payload.decode(
+                                    part.get_content_charset() or "utf-8",
+                                    errors="replace",
+                                )
                             break
                         elif ct == "text/html" and not body:
                             payload = part.get_payload(decode=True)
                             if payload:
-                                body = _html_to_plain(payload.decode(part.get_content_charset() or "utf-8", errors="replace"))
+                                body = _html_to_plain(
+                                    payload.decode(
+                                        part.get_content_charset() or "utf-8",
+                                        errors="replace",
+                                    )
+                                )
                 else:
                     payload = msg.get_payload(decode=True)
                     if payload:
@@ -434,7 +451,11 @@ def _record_pushed_message(db, account_id: int, message_id: str) -> None:
     try:
         db.execute(
             "INSERT OR IGNORE INTO telegram_push_log (account_id, message_id, pushed_at) VALUES (?, ?, ?)",
-            (account_id, message_id, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")),
+            (
+                account_id,
+                message_id,
+                datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+            ),
         )
         db.commit()
     except Exception:
@@ -708,4 +729,9 @@ def run_telegram_push_job(app) -> None:
         _cleanup_push_log(db)
 
     elapsed = time.monotonic() - t0
-    logger.info("[telegram_push] job finished: sent=%d dedup_skipped=%d elapsed=%.1fs", sent_count, dedup_skipped, elapsed)
+    logger.info(
+        "[telegram_push] job finished: sent=%d dedup_skipped=%d elapsed=%.1fs",
+        sent_count,
+        dedup_skipped,
+        elapsed,
+    )

@@ -1,5 +1,105 @@
         // ==================== 临时邮箱相关 ====================
 
+        let tempEmailOptionsCache = null;
+        let tempEmailOptionsState = 'idle';
+
+        // BUG-05: 快速切换临时邮箱/从普通邮箱切换到临时邮箱时，旧请求与轮询可能污染当前 UI。
+        // - tempEmailMessagesRequestSeq / tempEmailDetailRequestSeq 用于丢弃过期请求的响应（stale guard）。
+        // - selectTempEmail 主动 stopAllPolls，避免轮询继续跑 /api/emails 导致报错与串号。
+        let tempEmailMessagesRequestSeq = 0;
+        let tempEmailDetailRequestSeq = 0;
+
+        async function loadTempEmailOptions(forceRefresh = false) {
+            if (!forceRefresh && tempEmailOptionsCache) {
+                renderTempEmailOptions({ status: 'loaded', options: tempEmailOptionsCache });
+                return tempEmailOptionsCache;
+            }
+
+            try {
+                const providerSelect = document.getElementById('tempEmailProviderSelect');
+                const providerName = providerSelect && providerSelect.value ? providerSelect.value.trim() : '';
+                const url = providerName
+                    ? `/api/temp-emails/options?provider_name=${encodeURIComponent(providerName)}`
+                    : '/api/temp-emails/options';
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.success && data.options) {
+                    tempEmailOptionsState = 'loaded';
+                    tempEmailOptionsCache = data.options;
+                    renderTempEmailOptions({ status: 'loaded', options: data.options });
+                    return data.options;
+                }
+                throw new Error(
+                    window.resolveApiErrorMessage
+                        ? window.resolveApiErrorMessage(data.error || data, '加载失败', 'Load failed')
+                        : (data.error && data.error.message ? data.error.message : '加载失败')
+                );
+            } catch (error) {
+                tempEmailOptionsState = 'error';
+                console.error('加载临时邮箱配置失败:', error);
+                renderTempEmailOptions({
+                    status: 'error',
+                    errorMessage: error && error.message ? error.message : translateAppTextLocal('请检查临时邮箱 options 接口')
+                });
+                showToast(translateAppTextLocal('临时邮箱配置加载失败'), 'warning');
+                return null;
+            }
+        }
+
+        function renderTempEmailOptions(payload) {
+            const domainSelect = document.getElementById('tempEmailDomainSelect');
+            const hint = document.getElementById('tempEmailOptionsHint');
+            const status = document.getElementById('tempEmailOptionsStatus');
+            if (!domainSelect) return;
+
+            const renderStatus = payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'status')
+                ? payload.status
+                : 'loaded';
+            const options = renderStatus === 'loaded' && payload ? payload.options : null;
+            const domains = Array.isArray(options?.domains) ? options.domains.filter(item => item && item.enabled !== false) : [];
+
+            if (renderStatus === 'error') {
+                domainSelect.disabled = true;
+                domainSelect.innerHTML = `<option value="">${escapeHtml(translateAppTextLocal('域名配置加载失败'))}</option>`;
+                if (hint) {
+                    hint.textContent = translateAppTextLocal('无法读取临时邮箱域名配置。');
+                }
+                if (status) {
+                    status.textContent = payload.errorMessage || translateAppTextLocal('请检查 /api/temp-emails/options 接口是否可用。');
+                    status.style.display = 'block';
+                }
+                return;
+            }
+
+            domainSelect.disabled = false;
+            // BUG-07: 重建 innerHTML 前先保存当前选中值，重建后再恢复。
+            // 否则每次 loadTempEmails/renderTempEmailOptions 都会把用户选好的域名重置回"自动分配"。
+            const prevDomainValue = domainSelect.value;
+            domainSelect.innerHTML = [
+                `<option value="">${escapeHtml(translateAppTextLocal('自动分配域名'))}</option>`,
+                ...domains.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`)
+            ].join('');
+            // 如果用户之前选择的域名在新列表里仍然存在，则恢复选中状态
+            if (prevDomainValue && domains.some(d => d.name === prevDomainValue)) {
+                domainSelect.value = prevDomainValue;
+            }
+            if (status) {
+                status.textContent = '';
+                status.style.display = 'none';
+            }
+
+            if (hint) {
+                if (domains.length > 0) {
+                    hint.textContent = `${translateAppTextLocal('可用域名：')}${domains.map(item => item.name).join(' / ')}`;
+                } else {
+                    hint.textContent = translateAppTextLocal('当前未配置可选域名；域名将由服务端自动分配。');
+                }
+            }
+        }
+
         // 复制临时邮箱页面顶栏当前邮箱地址
         function copyTempEmailCurrent() {
             const el = document.getElementById('tempEmailCurrentName');
@@ -12,6 +112,22 @@
         async function loadTempEmails(forceRefresh = false) {
             const container = document.getElementById('accountList');
             const pageContainer = document.getElementById('tempEmailContainer');
+
+            const providerSelect = document.getElementById('tempEmailProviderSelect');
+            const domainSelect = document.getElementById('tempEmailDomainSelect');
+
+            // BUG-07: 原来这里调用 onTempEmailProviderChange()，
+            // 但那个函数是给用户手动切换 provider 时用的，会强制 forceRefresh=true 重新 fetch
+            // 并完全重建 domainSelect.innerHTML，导致用户选好的域名被重置。
+            // 改为只做必要的 disabled 状态同步，domain 选项加载由下面单次调用负责。
+            if (providerSelect && domainSelect) {
+                domainSelect.disabled = providerSelect.value !== 'cloudflare_temp_mail';
+            }
+
+            if (providerSelect && providerSelect.value === 'cloudflare_temp_mail') {
+                // 只调用一次，并尊重 forceRefresh 参数（非强制时优先用缓存，不会重建 innerHTML）
+                loadTempEmailOptions(forceRefresh);
+            }
 
             if (!forceRefresh && accountsCache['temp']) {
                 renderTempEmailList(accountsCache['temp']);
@@ -84,7 +200,7 @@
                     </div>
                     <div class="account-card-bottom">
                         <div class="account-actions">
-                            <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(email.email)}', this)" title="提取验证码" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
+                            <button class="btn btn-sm btn-accent" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(email.email)}', this, { source: 'temp' })" title="提取验证码" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); copyEmail('${escapeJs(email.email)}')" title="复制">📋</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); clearTempEmailMessages('${escapeJs(email.email)}')" title="清空">🧹</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); deleteTempEmail('${escapeJs(email.email)}')" title="删除" style="color:var(--clr-danger);">🗑️</button>
@@ -98,22 +214,58 @@
         }
 
         // 生成临时邮箱
+        // Provider 下拉框切换回调
+        // - cloudflare_temp_mail：启用域名下拉，加载 CF 配置的域名列表
+        // - legacy_bridge：禁用域名下拉（GPTMail 自动分配域名，不支持手动选择）
+        function onTempEmailProviderChange(selectedProvider) {
+            const domainSelect = document.getElementById('tempEmailDomainSelect');
+            if (!domainSelect) return;
+            if (selectedProvider === 'cloudflare_temp_mail') {
+                // CF：启用域名选择，重新加载 settings 中配置的域名
+                domainSelect.disabled = false;
+                loadTempEmailOptions(true);
+            } else {
+                // GPTMail (legacy_bridge)：禁用域名选择，自动分配
+                domainSelect.disabled = true;
+                domainSelect.innerHTML = '<option value="">自动分配域名</option>';
+                domainSelect.value = '';
+                const hint = document.getElementById('tempEmailOptionsHint');
+                if (hint) hint.textContent = translateAppTextLocal('GPTMail 自动分配域名，无需手动选择。');
+            }
+        }
+
         async function generateTempEmail() {
             try {
+                const prefixInput = document.getElementById('tempEmailPrefixInput');
+                const domainSelect = document.getElementById('tempEmailDomainSelect');
+                const providerSelect = document.getElementById('tempEmailProviderSelect');
+                const payload = {};
+                if (prefixInput && prefixInput.value.trim()) {
+                    payload.prefix = prefixInput.value.trim();
+                }
+                if (domainSelect && domainSelect.value.trim() && !domainSelect.disabled) {
+                    payload.domain = domainSelect.value.trim();
+                }
+                if (providerSelect && providerSelect.value.trim()) {
+                    payload.provider_name = providerSelect.value.trim();
+                }
                 showToast('正在生成临时邮箱…', 'info');
                 const response = await fetch('/api/temp-emails/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
                     showToast(`临时邮箱已生成: ${data.email}`, 'success');
+                    if (prefixInput) prefixInput.value = '';
                     delete accountsCache['temp'];
+                    // BUG-06: 不调用 loadGroups()，因为 loadTempEmails 内部已更新分组徽章。
+                    // loadGroups() 在 currentGroupId 为 null 时会触发 selectGroup()，
+                    // 进而清空 currentAccount，导致当前选中临时邮箱被意外重置。
                     loadTempEmails(true);
-                    loadGroups();
                 } else {
                     handleApiError(data, '生成临时邮箱失败');
                 }
@@ -124,8 +276,15 @@
 
         // 选择临时邮箱
         function selectTempEmail(email) {
+            // BUG-05: 切换到临时邮箱前停止所有轮询，避免轮询把 currentAccount 误当作普通邮箱去拉取。
+            if (typeof stopAllPolls === 'function') {
+                stopAllPolls();
+            }
+
             currentAccount = email;
             isTempEmailGroup = true;
+            currentEmailDetail = null;
+            isTrustedMode = false;
 
             // Update mailbox page bar (if visible)
             const bar = document.getElementById('currentAccountBar');
@@ -162,12 +321,9 @@
                 emailList.innerHTML = loadingHTML;
             }
 
-            const emailDetail = document.getElementById('emailDetail');
-            if (emailDetail) {
-                emailDetail.innerHTML = '<div class="empty-state"><span class="empty-icon">📄</span><p>选择一封邮件查看详情</p></div>';
+            if (typeof resetEmailDetailState === 'function') {
+                resetEmailDetailState({ source: 'temp' });
             }
-            const toolbar = document.getElementById('emailDetailToolbar');
-            if (toolbar) toolbar.style.display = 'none';
             const count = document.getElementById('emailCount');
             if (count) count.textContent = '';
             const tag = document.getElementById('methodTag');
@@ -196,18 +352,23 @@
                     // 如果当前选中的就是这个邮箱，清空邮件列表
                     if (currentAccount === email) {
                         currentEmails = [];
-                        document.getElementById('emailCount').textContent = '(0)';
-                        document.getElementById('emailList').innerHTML = `
+                        currentEmailDetail = null;
+                        const emailCount = document.getElementById('emailCount');
+                        if (emailCount) {
+                            emailCount.textContent = '(0)';
+                        }
+                        const emptyStateHTML = `
                             <div class="empty-state">
                                 <span class="empty-icon">📭</span><p>${translateAppTextLocal('收件箱为空')}</p>
                             </div>
                         `;
-                        document.getElementById('emailDetail').innerHTML = `
-                            <div class="empty-state">
-                                <span class="empty-icon">📄</span><p>${translateAppTextLocal('选择一封邮件查看详情')}</p>
-                            </div>
-                        `;
-                        document.getElementById('emailDetailToolbar').style.display = 'none';
+                        const emailList = document.getElementById('emailList');
+                        const tempMessageList = document.getElementById('tempEmailMessageList');
+                        if (emailList) emailList.innerHTML = emptyStateHTML;
+                        if (tempMessageList) tempMessageList.innerHTML = emptyStateHTML;
+                        if (typeof resetEmailDetailState === 'function') {
+                            resetEmailDetailState({ source: 'temp' });
+                        }
                     }
                 } else {
                     handleApiError(data, '清空临时邮箱失败');
@@ -236,21 +397,39 @@
 
                     if (currentAccount === email) {
                         currentAccount = null;
-                        document.getElementById('currentAccountBar').style.display = 'none';
-                        document.getElementById('emailList').innerHTML = `
+                        currentEmails = [];
+                        currentEmailDetail = null;
+                        isTrustedMode = false;
+                        const currentAccountBar = document.getElementById('currentAccountBar');
+                        if (currentAccountBar) currentAccountBar.style.display = 'none';
+                        const emptyMailboxHTML = `
                             <div class="empty-state">
                                 <span class="empty-icon">📬</span><p>请从左侧选择一个邮箱账号</p>
                             </div>
                         `;
-                        document.getElementById('emailDetail').innerHTML = `
-                            <div class="empty-state">
-                                <span class="empty-icon">📄</span><p>选择一封邮件查看详情</p>
-                            </div>
-                        `;
+                        const emailList = document.getElementById('emailList');
+                        if (emailList) emailList.innerHTML = emptyMailboxHTML;
+                        const tempMessageList = document.getElementById('tempEmailMessageList');
+                        if (tempMessageList) {
+                            tempMessageList.innerHTML = `
+                                <div class="empty-state">
+                                    <span class="empty-icon">📬</span>
+                                    <p>选择一个临时邮箱查看邮件</p>
+                                </div>
+                            `;
+                        }
+                        const tempName = document.getElementById('tempEmailCurrentName');
+                        if (tempName) tempName.textContent = translateAppTextLocal('选择一个临时邮箱');
+                        const tempRefreshBtn = document.getElementById('tempEmailRefreshBtn');
+                        if (tempRefreshBtn) tempRefreshBtn.style.display = 'none';
+                        if (typeof resetEmailDetailState === 'function') {
+                            resetEmailDetailState({ source: 'temp' });
+                        }
                     }
 
                     loadTempEmails(true);
-                    loadGroups();
+                    // BUG-06: 同 generateTempEmail，不调用 loadGroups()，
+                    // 避免 currentGroupId 为 null 时触发 selectGroup() 清空 currentAccount。
                 } else {
                     handleApiError(data, '删除临时邮箱失败');
                 }
@@ -265,6 +444,15 @@
             const tempContainer = document.getElementById('tempEmailMessageList');
             const loadingHTML = '<div class="loading-overlay"><span class="spinner"></span></div>';
 
+            // BUG-05: stale request guard
+            const requestSeq = ++tempEmailMessagesRequestSeq;
+            const targetEmail = String(email || '').trim();
+
+            currentEmailDetail = null;
+            if (typeof resetEmailDetailState === 'function') {
+                resetEmailDetailState({ source: 'temp' });
+            }
+
             if (container) container.innerHTML = loadingHTML;
             if (tempContainer) tempContainer.innerHTML = loadingHTML;
 
@@ -276,16 +464,20 @@
             }
 
             try {
-                const response = await fetch(`/api/temp-emails/${encodeURIComponent(email)}/messages`);
+                const response = await fetch(`/api/temp-emails/${encodeURIComponent(targetEmail)}/messages`);
                 const data = await response.json();
+
+                // 丢弃旧请求：用户已切换到其它邮箱或新请求已发起
+                if (requestSeq !== tempEmailMessagesRequestSeq || currentAccount !== targetEmail) {
+                    return;
+                }
 
                 if (data.success) {
                     currentEmails = data.emails;
-                    currentMethod = 'gptmail';
 
                     const methodTag = document.getElementById('methodTag');
                     if (methodTag) {
-                        methodTag.textContent = 'GPTMail';
+                        methodTag.textContent = 'Temp Mail';
                         methodTag.style.display = 'inline';
                         methodTag.style.backgroundColor = '#00bcf2';
                         methodTag.style.color = 'white';
@@ -308,13 +500,24 @@
                     if (tempContainer) tempContainer.innerHTML = errHTML;
                 }
             } catch (error) {
+                if (requestSeq !== tempEmailMessagesRequestSeq || currentAccount !== targetEmail) {
+                    return;
+                }
                 const errHTML = '<div class="empty-state"><span class="empty-icon">⚠️</span><p>网络错误，请重试</p></div>';
                 if (container) container.innerHTML = errHTML;
                 if (tempContainer) tempContainer.innerHTML = errHTML;
             } finally {
                 if (refreshBtn) {
+<<<<<<< HEAD
                     refreshBtn.disabled = false;
                     refreshBtn.textContent = translateAppTextLocal('获取邮件');
+=======
+                    // 仅当前最新请求结束时才恢复按钮状态，避免旧请求提前解锁。
+                    if (requestSeq === tempEmailMessagesRequestSeq) {
+                        refreshBtn.disabled = false;
+                        refreshBtn.textContent = translateAppTextLocal('🔄 获取邮件');
+                    }
+>>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                 }
             }
         }
@@ -327,9 +530,9 @@
             }
             container.innerHTML = emails.map((email, index) => {
                 const subject = email.subject || translateAppTextLocal('无主题');
-                const from = email.from || email.sender || translateAppTextLocal('未知发件人');
-                const date = email.receivedDateTime || email.date || '';
-                const preview = (email.bodyPreview || email.body_preview || '').substring(0, 80);
+                const from = email.from || translateAppTextLocal('未知发件人');
+                const date = email.date || '';
+                const preview = (email.body_preview || '').substring(0, 80);
                 return `
                     <div class="email-item ${index === 0 ? '' : ''}" onclick="getTempEmailDetail('${escapeJs(email.id || email.message_id || '')}', ${index})">
                         <div class="email-subject">${escapeHtml(subject)}</div>
@@ -343,35 +546,65 @@
 
         // 获取临时邮件详情
         async function getTempEmailDetail(messageId, index) {
-            document.querySelectorAll('.email-item').forEach((item, i) => {
+            document.querySelectorAll('#tempEmailMessageList .email-item').forEach((item, i) => {
                 item.classList.toggle('active', i === index);
             });
 
-            document.getElementById('emailDetailToolbar').style.display = 'flex';
+            if (typeof showEmailDetailContainer === 'function') {
+                showEmailDetailContainer({ source: 'temp' });
+            }
+            if (typeof setEmailDetailToolbarVisibility === 'function') {
+                setEmailDetailToolbarVisibility(true, { source: 'temp' });
+            }
 
-            const container = document.getElementById('emailDetail');
-            container.innerHTML = '<div class="loading-overlay"><span class="spinner"></span></div>';
+            const refs = typeof getEmailDetailRefs === 'function'
+                ? getEmailDetailRefs({ source: 'temp' })
+                : {
+                    container: document.getElementById('tempEmailDetail'),
+                    toolbar: document.getElementById('tempEmailDetailToolbar')
+                };
+            const container = refs.container;
+            if (container) {
+                container.innerHTML = '<div class="loading-overlay"><span class="spinner"></span></div>';
+            }
+
+            // BUG-05: stale request guard
+            const requestSeq = ++tempEmailDetailRequestSeq;
+            const mailboxEmail = String(currentAccount || '').trim();
 
             try {
-                const response = await fetch(`/api/temp-emails/${encodeURIComponent(currentAccount)}/messages/${encodeURIComponent(messageId)}`);
+                const response = await fetch(`/api/temp-emails/${encodeURIComponent(mailboxEmail)}/messages/${encodeURIComponent(messageId)}`);
                 const data = await response.json();
 
+                // 丢弃旧请求：用户已切换到其它邮箱或新详情请求已发起
+                if (requestSeq !== tempEmailDetailRequestSeq || String(currentAccount || '').trim() !== mailboxEmail) {
+                    return;
+                }
+
                 if (data.success) {
-                    renderEmailDetail(data.email);
+                    currentEmailDetail = data.email;
+                    renderEmailDetail(data.email, { source: 'temp' });
                 } else {
                     handleApiError(data, '加载邮件详情失败');
+                    if (container) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <span class="empty-icon">⚠️</span><p>${window.resolveApiErrorMessage ? window.resolveApiErrorMessage(data.error || data, '加载失败', 'Load failed') : (data.error && data.error.message ? data.error.message : '加载失败')}</p>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                if (requestSeq !== tempEmailDetailRequestSeq || String(currentAccount || '').trim() !== mailboxEmail) {
+                    return;
+                }
+                if (container) {
                     container.innerHTML = `
                         <div class="empty-state">
-                            <span class="empty-icon">⚠️</span><p>${window.resolveApiErrorMessage ? window.resolveApiErrorMessage(data.error || data, '加载失败', 'Load failed') : (data.error && data.error.message ? data.error.message : '加载失败')}</p>
+                            <span class="empty-icon">⚠️</span><p>网络错误，请重试</p>
                         </div>
                     `;
                 }
-            } catch (error) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <span class="empty-icon">⚠️</span><p>网络错误，请重试</p>
-                    </div>
-                `;
             }
         }
 

@@ -96,23 +96,34 @@ def api_external_pool_claim_random():
     caller_id = body.get("caller_id", "")
     task_id = body.get("task_id", "")
     provider = body.get("provider")
+    project_key = body.get("project_key")
+    email_domain = body.get("email_domain")
 
     try:
         account = claim_random(
             caller_id=caller_id,
             task_id=task_id,
             provider=provider,
+            project_key=project_key,
+            email_domain=email_domain,
         )
         data = {
             "account_id": account["id"],
             "email": account["email"],
+            "email_domain": account.get("email_domain") or "",
             "claim_token": account["claim_token"],
+            "claimed_at": account.get("claimed_at") or "",
             "lease_expires_at": account["lease_expires_at"],
         }
         _audit(
             endpoint,
             "ok",
-            details={"provider": provider or "", "account_id": data["account_id"]},
+            details={
+                "provider": provider or "",
+                "project_key": project_key or "",
+                "email_domain": email_domain or "",
+                "account_id": data["account_id"],
+            },
         )
         return jsonify(external_api_service.ok(data))
     except PoolServiceError as exc:

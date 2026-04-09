@@ -26,6 +26,9 @@ class SmokeContractTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data.get("status"), "ok")
+        # 新增字段：用于前端判断是否发生重启
+        self.assertTrue(data.get("boot_id"))
+        self.assertTrue(data.get("version"))
 
     def test_pages_are_accessible(self):
         client = self.app.test_client()

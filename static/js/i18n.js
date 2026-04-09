@@ -80,6 +80,12 @@
         '打标签': 'Add Tags',
         '去标签': 'Remove Tags',
         '移动分组': 'Move Group',
+        '🔄 刷新 Token': '🔄 Refresh Token',
+        '请选择要刷新 Token 的账号': 'Please select accounts to refresh tokens',
+        '所选账号均为 IMAP 账号，不支持 Token 刷新': 'All selected accounts are IMAP accounts and do not support token refresh',
+        '刷新请求失败': 'Refresh request failed',
+        '刷新执行出现错误': 'An error occurred during refresh',
+        '当前已有刷新任务执行中，请稍后再试': 'A refresh task is already running. Please try again later',
         '标签': 'Tags',
         '操作': 'Actions',
         '选择': 'Select',
@@ -260,11 +266,45 @@
         '建议设置为 30 天，防止 Token 因 90 天不使用而过期': 'Recommended: 30 days to prevent token expiration after 90 days of inactivity.',
         '建议设置为 5-10 秒，避免频繁请求触发 API 限流': 'Recommended: 5-10 seconds to avoid triggering API rate limits with frequent requests.',
         '输入新密码（留空则不修改）': 'Enter a new password (leave blank to keep unchanged)',
-        '输入 GPTMail API Key': 'Enter the GPTMail API key',
+        '输入临时邮箱 API Key': 'Enter the temp mailbox API key',
+        '用于临时邮箱能力。旧版临时邮箱 API Key 字段仅保留兼容读取与迁移，不再作为正式配置字段。': 'Used for temp mailbox capability. The legacy temp mailbox API key field is kept only for compatibility reads and migration, and is no longer an official settings field.',
         '用于 /api/external/* 的 X-API-Key': 'Used as the X-API-Key for /api/external/*',
         '用于对外开放接口鉴权（请求头：X-API-Key）。如需禁用对外开放接口，可清空后保存。': 'Used to authorize external APIs with the X-API-Key header. Clear it and save to disable external APIs.',
         '每行一个 IP 或 CIDR，如 192.168.1.0/24': 'One IP or CIDR per line, for example 192.168.1.0/24',
         '支持精确 IP 和 CIDR 格式。每行一个，保存时自动转为 JSON 数组。': 'Supports exact IPs and CIDR notation. One per line, automatically saved as a JSON array.',
+        // ── 临时邮箱创建面板（侧边栏）──
+        '前缀（可选）': 'Prefix (optional)',
+        '自动分配域名': 'Auto-assign domain',
+        '支持自定义前缀和多域名创建。': 'Custom prefix and multi-domain creation supported.',
+        '可用域名：': 'Available domains: ',
+        '当前未配置可选域名；域名将由服务端自动分配。': 'No selectable domains configured; domain will be auto-assigned by the server.',
+        'GPTMail 自动分配域名，无需手动选择。': 'GPTMail auto-assigns the domain, no manual selection needed.',
+        '域名配置加载失败': 'Failed to load domain configuration',
+        '无法读取临时邮箱域名配置。': 'Unable to read temp mailbox domain configuration.',
+        // ── 设置页：临时邮箱配置区 ──
+        '⚡ 临时邮箱配置': '⚡ Temp Mailbox Configuration',
+        '全局临时邮箱 Provider': 'Global Temp Mailbox Provider',
+        '决定 external API 和其他未明确指定 provider 的操作所使用的来源。生成邮箱时可在前端独立选择。': 'Determines the provider used by external API calls and other operations without a specified provider. Can be independently selected when creating a mailbox.',
+        '临时邮箱 API Base URL': 'Temp Mailbox API Base URL',
+        '上游临时邮箱服务地址，留空则使用默认配置。': 'Upstream temp mailbox service URL. Leave blank to use the default.',
+        '临时邮箱 API Key': 'Temp Mailbox API Key',
+        '可用域名（JSON）': 'Available Domains (JSON)',
+        '支持字符串数组或 `{name, enabled}` 对象数组。': 'Supports string arrays or {name, enabled} object arrays.',
+        '默认域名': 'Default Domain',
+        '前缀规则（JSON）': 'Prefix Rules (JSON)',
+        // ── 设置页：CF Worker 配置区 ──
+        '☁ Cloudflare Temp Email Worker 配置': '☁ Cloudflare Temp Email Worker Configuration',
+        '与 GPTMail 完全独立的配置。部署 dreamhunter2333/cloudflare_temp_email 后填写。': 'Completely independent from GPTMail. Fill in after deploying dreamhunter2333/cloudflare_temp_email.',
+        'CF Worker 部署地址': 'CF Worker Base URL',
+        'Cloudflare Worker 的部署 URL，不含尾部斜杠。': 'Cloudflare Worker deployment URL, without trailing slash.',
+        'CF Worker Admin 密码': 'CF Worker Admin Password',
+        '对应 CF Worker 环境变量 ADMIN_PASSWORDS 中的密码值。': 'Password value from the CF Worker ADMIN_PASSWORDS environment variable.',
+        '☁ 从 CF Worker 同步域名': '☁ Sync Domains from CF Worker',
+        '自动读取 CF Worker 的域名配置，同步至下方「临时邮箱可用域名」和「默认域名」。': 'Automatically read the CF Worker domain configuration and sync to the "Available Domains" and "Default Domain" fields below.',
+        '⏳ 同步中…': '⏳ Syncing…',
+        // ── 设置页：对外 API ──
+        '对外开放 API Key': 'External API Key',
+        '对外开放 API 多 Key 配置（JSON）': 'External API Multi-Key Configuration (JSON)',
         '输入 Bot Token': 'Enter the bot token',
         '输入 Chat ID': 'Enter the chat ID',
         'http://host:port 或 socks5://user:pass@host:port': 'http://host:port or socks5://user:pass@host:port',
@@ -358,11 +398,6 @@
         '验证失败:': 'Validation failed:',
         '暂无标签': 'No tags yet',
         '[详情]': '[Details]',
-        '获取授权链接失败': 'Failed to get authorization URL',
-        '授权链接已复制到剪贴板': 'Authorization URL copied to clipboard',
-        '已在新窗口打开授权页面': 'Authorization page opened in a new window',
-        '请先粘贴授权后的完整 URL': 'Please paste the full redirected URL first',
-        '✅ Token 获取成功！请将邮箱和密码替换后点导入': 'Token received. Replace the email and password, then import.',
         '初始化安全会话失败，请刷新页面后重试': 'Failed to initialize the secure session. Refresh the page and try again.',
         '会话已失效，请刷新页面后重试': 'Your session expired. Refresh the page and try again.',
         '加载设置失败': 'Failed to load settings',
@@ -373,12 +408,30 @@
         '刷新间隔必须在 0-60 秒之间': 'Refresh delay must be between 0 and 60 seconds',
         '请输入 Cron 表达式': 'Please enter a cron expression',
         '轮询间隔必须在 5-300 秒之间': 'Polling interval must be between 5 and 300 seconds',
+        '轮询间隔必须在 3-300 秒之间': 'Polling interval must be between 3 and 300 seconds',
         '轮询次数必须在 0-100 次之间（0 表示持续轮询）': 'Polling count must be between 0 and 100 (0 means continuous polling)',
         'Telegram 轮询间隔必须在 10-86400 秒之间': 'Telegram polling interval must be between 10 and 86400 seconds',
         '设置已保存，重启应用后生效': 'Settings saved successfully',
         '保存设置失败': 'Failed to save settings',
         '已停止轮询': 'Polling stopped',
         '轮询连续失败，已自动停止': 'Polling stopped automatically after repeated failures',
+        // 简洁模式自动轮询 - 运行状态
+        '停止监听': 'Stop Listening',
+        '监听超时，未检测到新邮件': 'Monitoring timeout, no new email detected',
+        '检测到验证码': 'Verification code detected',
+        '已复制到剪贴板': 'Copied to clipboard',
+        '发现新邮件': 'New email detected',
+        '拉取失败，已停止监听': 'Fetch failed, monitoring stopped',
+        '已停止监听': 'Monitoring stopped',
+        '账号已被删除，已停止监听': 'Account deleted, monitoring stopped',
+        '页面元素丢失，已停止监听': 'Page element lost, monitoring stopped',
+        // 简洁模式自动轮询 - UI 面板词条
+        '简洁模式自动轮询': 'Compact Mode Auto Polling',
+        '复制邮箱后自动监听': 'Auto-monitor after copying email',
+        '最多轮询次数': 'Max Poll Count',
+        '范围：3-60 秒': 'Range: 3-60 seconds',
+        '范围：0-100 次': 'Range: 0-100 times',
+        '简洁模式轮询内存提示': 'Compact mode polling memory note',
         '没有需要重试的失败账号': 'There are no failed accounts to retry',
         '刷新过程中出现错误': 'An error occurred during refresh',
         '刷新请求失败': 'Refresh request failed',
@@ -466,6 +519,7 @@
         '重试中...': 'Retrying...',
         '正在重试失败的账号...': 'Retrying failed accounts...',
         '轮询中': 'Polling',
+        '轮询监听中…': 'Polling active…',
         '是否停止轮询？': 'Stop polling?',
         '刷新中...': 'Refreshing...',
         '正在初始化...': 'Initializing...',
@@ -477,14 +531,8 @@
         '等待': 'Waiting',
         '秒后继续...': 'seconds before continuing...',
         '请输入有效的十六进制颜色（如 #FF5500）': 'Please enter a valid hexadecimal color such as #FF5500',
-        '已自动接收微软授权回跳结果，请确认后换取 Token': 'The Microsoft callback was captured automatically. Confirm it and exchange the token',
-        '请输入当前系统登录密码以完成二次验证': 'Enter the current app login password to complete local verification',
-        '浏览器拦截了授权窗口，请允许弹窗后重试，或复制授权链接手动打开': 'The browser blocked the authorization popup. Allow popups or copy the auth URL and open it manually',
-        '微软授权失败': 'Microsoft authorization failed',
-        '二次验证失败': 'Local verification failed',
-        '换取 Token 失败': 'Failed to exchange token',
         '请选择要导出的分组': 'Please select the groups to export',
-        '支持混合格式，每行一个账号...\nOutlook: 邮箱----密码----client_id----refresh_token\nIMAP: 邮箱----授权码----provider\n或: 邮箱----密码（自动识别类型）\nGPTMail: 仅邮箱地址': 'Mixed formats are supported, one account per line...\nOutlook: email----password----client_id----refresh_token\nIMAP: email----app-password----provider\nOr: email----password (auto-detect type)\nGPTMail: email only',
+        '支持混合格式，每行一个账号...\nOutlook: 邮箱----密码----client_id----refresh_token\nIMAP: 邮箱----授权码----provider\n或: 邮箱----密码（自动识别类型）\n临时邮箱: 仅邮箱地址': 'Mixed formats are supported, one account per line...\nOutlook: email----password----client_id----refresh_token\nIMAP: email----app-password----provider\nOr: email----password (auto-detect type)\nTemp mailbox: email only',
         '智能识别模式：自动按每行格式和邮箱域名判断类型，自动分组': 'Smart detection mode: identify account type by line format and email domain, then group automatically',
         '自动按类型分组': 'Group automatically by type',
         '格式：邮箱----密码----client_id----refresh_token，支持批量导入（每行一个）': 'Format: email----password----client_id----refresh_token, supports bulk import (one per line)',
@@ -495,9 +543,6 @@
         '导入邮箱账号': 'Import Mail Accounts',
         '默认分组': 'Default Group',
         '未分组的邮箱': 'Ungrouped Mailboxes',
-        '🔑 注册': '🔑 Register',
-        '🔑 获取 Token': '🔑 Get Token',
-        '获取 Token': 'Get Token',
         '🔔 推送': '🔔 Notifications',
         '邮箱类型': 'Mailbox Type',
         '🔍 智能识别（混合导入）': '🔍 Smart Detection (Mixed Import)',
@@ -601,7 +646,121 @@
         '近半年刷新历史（共': 'Refresh history for the last six months (total ',
         '查看错误': 'View error',
         '点击关闭推送': 'Click to disable notifications',
-        '移动到分组': 'Move to Group'
+        '移动到分组': 'Move to Group',
+
+        // 版本更新检测
+        '发现新版本': 'New version available',
+        '查看更新日志': 'View changelog',
+        '立即更新': 'Update now',
+        '忽略': 'Dismiss',
+        '正在触发更新...': 'Triggering update...',
+        '等待容器重启...': 'Waiting for restart...',
+        '更新完成，正在刷新页面...': 'Update complete, reloading...',
+        '更新超时，请手动检查容器状态': 'Update timed out, please check container status',
+        '更新失败：': 'Update failed: ',
+        'Docker API 更新失败：': 'Docker API update failed: ',
+        '更新请求失败，请检查网络': 'Update request failed, check network',
+
+        // 手动触发容器更新
+        '触发容器更新': 'Trigger Container Update',
+        '🚀 触发容器更新': '🚀 Trigger Container Update',
+        '拉取最新镜像并重启容器，使用上方选择的更新方式': 'Pull the latest image and restart container using the selected method above',
+        '当前已是最新版本，无需更新': 'Already up to date, no update needed',
+        '当前已是最新版本': 'Already up to date',
+        '请求超时': 'Request timed out',
+        '网络错误': 'Network error',
+        '更新请求失败：': 'Update request failed: ',
+        '立即更新': 'Update Now',
+
+        // 设置面板 Tab 名
+        '基础': 'Basic',
+        '临时邮箱': 'Temp Mailboxes',
+        'API 安全': 'API Security',
+        '自动化': 'Automation',
+
+        // 一键更新配置区域
+        '一键更新配置': 'Auto Update Settings',
+        '🔄 一键更新配置': '🔄 Auto Update Settings',
+        '更新方式': 'Update Method',
+        'Watchtower（推荐）': 'Watchtower (Recommended)',
+        'Docker API（高级）': 'Docker API (Advanced)',
+        '使用外部 Watchtower 容器管理更新（推荐，更安全）': 'Use external Watchtower container for updates (recommended, more secure)',
+        '容器直接通过 Docker API 自更新（需挂载 docker.sock，存在安全风险）': 'Container self-updates via Docker API (requires docker.sock mount, security risk)',
+
+        // Docker API 安全警告
+        'Docker API 模式安全警告：': 'Docker API Mode Security Warning:',
+        '此操作授予容器完全的 Docker API 访问权限，请谨慎使用': 'This grants full Docker API access to the container, use with caution',
+        '建议仅在测试环境或可信网络中启用': 'Recommended only for test environments or trusted networks',
+
+        // 首次配置指南
+        '首次配置指南：': 'First-time Setup Guide:',
+
+        // Watchtower 配置
+        'Watchtower API 地址': 'Watchtower API URL',
+        '（Docker 内网地址）': '(Docker internal address)',
+        'Watchtower API Token': 'Watchtower API Token',
+        '🔗 测试连通性': '🔗 Test Connection',
+        '验证 Watchtower 服务是否可达且 Token 正确': 'Verify Watchtower service is reachable and token is correct',
+        '与 docker-compose 中 WATCHTOWER_HTTP_API_TOKEN 保持一致。留空则读取环境变量。': 'Must match WATCHTOWER_HTTP_API_TOKEN in docker-compose. Leave empty to use env variable.',
+
+        // 部署信息警告
+        '处理建议': 'Suggestion',
+        '默认 http://watchtower:8080，仅 Docker 部署模式下可用': 'Default http://watchtower:8080, only available in Docker deployment mode',
+        '输入 Watchtower HTTP API Token': 'Enter Watchtower HTTP API Token',
+        '正在触发更新...': 'Triggering update...',
+        '等待容器重启...': 'Waiting for container restart...',
+        '更新已触发': 'Update triggered',
+
+        // showToast 动态消息
+        'Docker API 更新已启动，等待容器重启...': 'Docker API update started, waiting for container restart...',
+        'Docker API 自更新功能未启用。请在 .env 中设置 DOCKER_SELF_UPDATE_ALLOW=true，并在 docker-compose.yml 中挂载 docker.sock': 'Docker API self-update not enabled. Set DOCKER_SELF_UPDATE_ALLOW=true in .env and mount docker.sock in docker-compose.yml',
+        '无法访问 Docker API。请确认已在 docker-compose.yml 中挂载 /var/run/docker.sock': 'Cannot access Docker API. Please mount /var/run/docker.sock in docker-compose.yml',
+        '一键更新需要配置 Watchtower 服务（仅 Docker 部署支持）。请在 .env 中设置 WATCHTOWER_HTTP_API_TOKEN，并使用含 Watchtower 的 docker-compose 部署方式': 'Auto-update requires Watchtower service (Docker deployment only). Set WATCHTOWER_HTTP_API_TOKEN in .env and use docker-compose with Watchtower',
+        '无法连接 Watchtower 服务，请确认已使用 docker-compose 方式部署，且 watchtower 容器正常运行': 'Cannot connect to Watchtower. Confirm docker-compose deployment with watchtower container running',
+        '更新请求超时，请检查配置和网络连接': 'Update request timed out, check configuration and network',
+        '更新请求失败，请检查网络连接': 'Update request failed, check network connection',
+        '等待超时：容器未发生重启，可能已是最新版本或更新仍在后台进行': 'Timeout: container did not restart, may already be latest or update still in progress',
+        '等待超时：容器尚未恢复，请检查容器状态/日志': 'Timeout: container not recovered, check container status/logs',
+        '等待超时：容器未发生重启，请检查 Watchtower 配置/日志': 'Timeout: container did not restart, check Watchtower config/logs',
+        '保存设置失败': 'Failed to save settings',
+
+        // Watchtower / Docker API 后端响应
+        'Watchtower 检查完毕，当前已是最新版本': 'Watchtower check complete, already up to date',
+        '✅ 连通正常': '✅ Connection OK',
+        '连通正常': 'Connection OK',
+        '⏳ 测试中…': '⏳ Testing...',
+        '⏳ 发送中…': '⏳ Sending...',
+        '更新失败：': 'Update failed: ',
+        'Docker API 更新失败：': 'Docker API update failed: '
+    };
+
+    // 含内联 HTML（<code>、<strong> 等）的整段翻译块
+    // 用 data-i18n-html="key" 标记需要整体替换 innerHTML 的元素
+    const htmlBlocks = {
+        'docker-api-warning': {
+            zh: '<strong>⚠️ Docker API 模式安全警告：</strong><br>' +
+                '1. 需要在 docker-compose.yml 中挂载 <code>/var/run/docker.sock</code><br>' +
+                '2. 需要在 .env 中设置 <code>DOCKER_SELF_UPDATE_ALLOW=true</code><br>' +
+                '3. ⚠️ 此操作授予容器完全的 Docker API 访问权限，请谨慎使用<br>' +
+                '4. 建议仅在测试环境或可信网络中启用',
+            en: '<strong>⚠️ Docker API Mode Security Warning:</strong><br>' +
+                '1. Mount <code>/var/run/docker.sock</code> in docker-compose.yml<br>' +
+                '2. Set <code>DOCKER_SELF_UPDATE_ALLOW=true</code> in .env<br>' +
+                '3. ⚠️ This grants full Docker API access to the container, use with caution<br>' +
+                '4. Recommended only for test environments or trusted networks'
+        },
+        'watchtower-setup-guide': {
+            zh: '<strong>📌 首次配置指南：</strong><br>' +
+                '1. 在 <code>.env</code> 文件中设置 <code>WATCHTOWER_HTTP_API_TOKEN</code>（使用 <code>python -c "import secrets; print(secrets.token_hex(32))"</code> 生成）<br>' +
+                '2. 使用 <code>docker-compose up -d</code> 重启容器以应用 Token<br>' +
+                '3. 在下方配置相同的 Token 并保存设置<br>' +
+                '4. 点击"测试连通性"验证配置是否正确',
+            en: '<strong>📌 First-time Setup Guide:</strong><br>' +
+                '1. Set <code>WATCHTOWER_HTTP_API_TOKEN</code> in <code>.env</code> file (generate with <code>python -c "import secrets; print(secrets.token_hex(32))"</code>)<br>' +
+                '2. Run <code>docker-compose up -d</code> to restart and apply Token<br>' +
+                '3. Configure the same Token below and save settings<br>' +
+                '4. Click "Test Connection" to verify'
+        }
     };
 
     const reverseMap = Object.fromEntries(
@@ -775,6 +934,17 @@
         if (root.tagName === 'INPUT' && root.type === 'button' && root.value) {
             root.value = translateAppText(root.value);
         }
+
+        // data-i18n-html 整段 HTML 翻译（含 <code>/<strong> 等内联标签的段落）
+        const lang = getLanguage();
+        root.querySelectorAll('[data-i18n-html]').forEach((el) => {
+            const key = el.getAttribute('data-i18n-html');
+            const block = htmlBlocks[key];
+            if (block) {
+                el.innerHTML = block[lang] || block.zh;
+            }
+        });
+
         root.querySelectorAll('[placeholder],[title],[aria-label],input[type="button"][value]').forEach((element) => {
             if (isInI18nSkipScope(element)) {
                 return;

@@ -1,4 +1,4 @@
-__version__ = "1.10.1"
+__version__ = "1.14.0"
 
 from outlook_web.app import create_app
 

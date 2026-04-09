@@ -1,5 +1,107 @@
 # DEVLOG
 
+## v1.14.0 - CF 临时邮箱池化接入与删除链路修复
+
+发布日期：2026-04-09
+
+### 新增功能
+
+- 新增 CF 临时邮箱接入邮箱池主链路：当 `/api/external/pool/claim-random` 指定 `provider=cloudflare_temp_mail` 且池中无可用账号时，系统可动态创建 CF 邮箱并直接进入 claimed 状态。
+- 新增 CF pool 账号读信路由识别：`mailbox_resolver` 支持将 `provider=cloudflare_temp_mail` 的账号解析为 `kind=temp`，统一走 TempMailService 读取邮件与提取验证码。
+- 新增临时邮箱 options 的 provider 维度：`/api/temp-emails/options` 支持 `provider_name` 参数，前端按当前 provider 请求域名与前缀规则，避免跨 provider 配置串扰。
+- 新增账号管理保护：邮箱池管理的 CF 账号在后端接口与前端操作入口都增加编辑/删除守卫，降低误操作对池状态的破坏风险。
+
+### 修复
+
+- 修复 Graph 401 误判问题：新增 Graph 401 细分判定逻辑，仅在 token 真正过期时标记 `auth_expired`，权限不足场景允许继续 IMAP 回退。
+- 修复 Issue #32 删除 500：删除账号前事务化清理 `account_claim_logs` 与 `account_project_usage` 关联记录，避免外键约束导致的删除失败。
+- 修复全选语义偏差：全选状态计算改为基于分组作用域数据，并在搜索模式下增加显式拦截提示，减少“只选当前页”的误解。
+- 修复批量导入 refresh_token 折行问题：导入链路新增续行合并逻辑，降低从外部复制长 token 时的解析失败概率。
+- 修复 CF Worker 域名 options 口径：增强 `cf_worker_*` 优先读取和自动同步兜底，恢复域名下拉在部分配置场景下的可用性。
+
+### 重要变更
+
+- 版本号从 `1.13.0` 提升到 `1.14.0`，应用 UI、系统接口和对外 API 返回的版本信息继续由 `outlook_web.__version__` 统一驱动。
+- 数据库 schema 版本提升为 `19`，`accounts` 表新增 `temp_mail_meta` 字段，用于存储 CF 邮箱池化链路所需的 provider 元数据。
+- 邮箱池支持的 provider 白名单扩展到 `cloudflare_temp_mail`，并在 `complete` 阶段针对 `success/credential_invalid` 结果增加远程 CF 邮箱删除动作（失败非阻塞，仅记录日志）。
+
+### 测试/验证
+
+- 自动化测试：`python -m unittest discover -s tests -v`
+  - 结果：`Ran 952 tests in 168.755s`
+  - 状态：全部通过（`OK`, `skipped=8`）
+- 构建验证：`docker build -t outlook-email-plus:v1.14.0 .`
+  - 状态：成功
+  - 镜像摘要：`sha256:c3a1e16a8779948a100890dae8f1373616e55436c4a24c935ac31a2fc792202b`
+- 发布产物（已上传 GitHub Release）：
+  - `dist/outlook-email-plus-v1.14.0-docker.tar`
+  - `dist/outlookEmailPlus-v1.14.0-src.zip`
+- GitHub Release：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.14.0`
+
+### CI/CD 与镜像仓库核对（按实际回填）
+
+- 目标提交：`fa795b8`（`docs(release): v1.14.0`）
+- GitHub Actions：
+  - ✅ Python Tests：`24186894407`
+  - ✅ SonarCloud Scan：`24186894434`
+  - ❌ Code Quality：`24186894405`（Black 检查未通过，日志提示会重排 `outlook_web/controllers/temp_emails.py`、`outlook_web/db.py` 等文件）
+  - ❌ Build and Push Docker Image（main）：`24186894400`（`quality-gate` 失败，`build-and-push` job 被跳过）
+  - ❌ Build and Push Docker Image（tag `v1.14.0`）：`24186895639`（同上）
+  - ✅ Create GitHub Release：`24186895629`
+- 镜像仓库检查：
+  - Docker Hub：`docker manifest inspect guangshanshui/outlook-email-plus:v1.14.0` → `no such manifest`
+  - GHCR：`docker manifest inspect ghcr.io/zeropointsix/outlook-email-plus:v1.14.0` → `manifest unknown`
+- 结论：
+  - Release 页面与附件已发布完成；
+  - 但 `v1.14.0` 镜像尚未成功推送到 DockerHub/GHCR，需先修复代码格式门禁后再触发镜像构建发布。
+
+## v1.13.0 - 热更新双模式端到端验证与合并
+
+发布日期：2026-04-09
+
+### 新增功能
+
+- 新增热更新双模式支持：Watchtower（推荐）和 Docker API 自更新（A2 helper 容器），可在设置页面一键切换更新方式。
+- 新增 Watchtower 集成：连通性测试、手动触发更新、已是最新版本智能检测（基于 Watchtower 同步 POST `/v1/update` 接口的行为特征——收到 200 响应即表示当前已是最新版本）。
+- 新增 Docker API 自更新（A2 方案）：通过 Docker API 创建短生命周期 updater 容器（`oep-updater-*`），执行 12 步更新流程（pull → digest 比对 → create → stop 旧 → start 新 → health check → rename → cleanup），支持失败自动回滚。
+- 新增 GHCR 镜像支持：白名单新增 `ghcr.io/zeropointsix/` 前缀，支持 GitHub Container Registry 镜像的热更新。
+- 新增版本比较 pre-release 后缀支持：`_version_gt()` 自动忽略 `-hotupdate-test` 等后缀，仅比较语义化版本号。
+- 新增 `/api/system/deployment-info` 部署信息 API：返回镜像名、标签类型、本地构建检测、Docker API 可用性、Watchtower 连通性。
+- 新增 healthz `boot_id` 和 `version` 字段：前端通过 boot_id 变化精确检测容器重启。
+- 新增设置面板手动触发更新按钮 UI，支持 i18n 中英双语。
+
+### 修复
+
+- 修复 Watchtower 连通测试超时：Watchtower `POST /v1/update` 是同步接口，完整镜像检查需 25-30s，连通测试超时从 5s 增加到 35s。
+- 修复 Watchtower 200 响应被误判为"更新成功"：实际为"已是最新版本"（收到 200 说明 Watchtower 完成检查且未触发更新）。
+- 修复 GHCR 镜像不在白名单导致 Docker API 更新被拦截。
+- 修复本地镜像检测 `_looks_like_local_image_ref()` 误判远程镜像为本地构建。
+- 修复 `can_auto_update` 逻辑仅检查 Watchtower 不检查 Docker API 可用性。
+- 修复 Docker API 自更新同步调用导致容器停止时 HTTP 响应中断（改为后台线程 + 立即返回 → 再改为 A2 helper 容器方案）。
+- 修复 `ModuleNotFoundError: outlook_web.models.AuditLog` 导致更新接口 500。
+- 修复前端 `waitForRestart()` 无法检测容器真正重启（新增 boot_id 变化检测 + seenDown 双重判定）。
+- 修复 Docker API 更新同 digest 时前端超时卡死（新增 digest 预检查，相同版本立即返回 `already_latest`）。
+- 修复 emoji 前缀文本（🔄/🚀）的 i18n 翻译匹配失败。
+- 修复设置页 Tab 标签（基础/临时邮箱/API 安全/自动化）缺少英文翻译。
+
+### 重要变更
+
+- 版本号从 `1.12.0` 提升到 `1.13.0`，应用 UI、系统接口和对外 API 返回的版本信息继续由 `outlook_web.__version__` 统一驱动。
+- 热更新功能经过 `hotupdate-test` 分支 24 个提交的端到端验证，使用 GHCR 远程镜像在 Docker 环境中完成了两种更新方式的实际测试。
+- 删除测试专用 compose 文件（`docker-compose.hotupdate-test.yml`、`docker-compose.docker-api-test.yml`），仅保留主 `docker-compose.yml`。
+- 英文 README 大幅更新：新增 docker-compose + Watchtower 部署方式、一键更新功能描述和环境变量说明。
+
+### 测试/验证
+
+- 自动化测试：`python -m unittest discover -s tests -v`
+  - 结果：`Ran 893 tests in 171.220s`
+  - 状态：全部通过（6 skipped）
+- 端到端验证（`hotupdate-test` 分支）：
+  - Watchtower 模式：连通性测试、已是最新检测、i18n 双语切换 ✅
+  - Docker API 模式：digest 预检查、A2 helper 容器创建/运行/自动清理 ✅
+  - 镜像白名单：本地构建拦截、GHCR 远程镜像放行 ✅
+  - 正向端到端：远程镜像 tag 变更 → A2 updater 完成 stop/start/rename/backup 全链路 ✅
+
 ## v1.10.0 - OAuth 回归修复与认证后工作区重构
 
 发布日期：2026-03-26

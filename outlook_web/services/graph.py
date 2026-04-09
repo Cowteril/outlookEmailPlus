@@ -10,6 +10,31 @@ from outlook_web.services.http import get_response_details
 # Token 端点
 TOKEN_URL_GRAPH = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
+# Graph API 返回 401 时的状态码（可能是 token 过期，也可能是权限不足，需进一步解析响应体区分）
+GRAPH_AUTH_EXPIRED_STATUS = 401
+
+# 表示 token 真正过期的 Graph API error code；权限不足（如 ErrorAccessDenied）不在此列
+_GRAPH_TOKEN_EXPIRED_CODES = {
+    "InvalidAuthenticationToken",
+    "Authentication.TokenExpired",
+    "TokenExpired",
+}
+
+
+def _is_graph_auth_expired(status_code: int, details: Any) -> bool:
+    """判断 Graph API 401 是 token 真正过期，而非权限不足。
+
+    - 权限不足（ErrorAccessDenied 等）→ False，IMAP 仍可回退
+    - token 真正过期 → True
+    - 无法解析响应体 → False（保守策略：不阻断 IMAP 回退）
+    """
+    if status_code != GRAPH_AUTH_EXPIRED_STATUS:
+        return False
+    if isinstance(details, dict):
+        error_code = details.get("error", {}).get("code", "")
+        return error_code in _GRAPH_TOKEN_EXPIRED_CODES
+    return False
+
 
 def build_proxies(proxy_url: str) -> Optional[Dict[str, str]]:
     """构建 requests 的 proxies 参数"""
@@ -63,7 +88,11 @@ def get_access_token_graph_result(client_id: str, refresh_token: str, proxy_url:
 
         # 根据 Microsoft Learn 文档：refresh token 可能会在每次使用时“自我替换”，应保存新的 refresh_token（如有）。
         new_refresh_token = payload.get("refresh_token")
-        return {"success": True, "access_token": access_token, "refresh_token": new_refresh_token}
+        return {
+            "success": True,
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+        }
     except Exception as exc:
         return {
             "success": False,
@@ -128,6 +157,7 @@ def get_emails_graph(
             details = get_response_details(res)
             return {
                 "success": False,
+                "auth_expired": _is_graph_auth_expired(res.status_code, details),
                 "error": build_error_payload(
                     "EMAIL_FETCH_FAILED",
                     "获取邮件失败，请检查账号配置",
@@ -137,7 +167,11 @@ def get_emails_graph(
                 ),
             }
 
-        return {"success": True, "emails": res.json().get("value", [])}
+        return {
+            "success": True,
+            "emails": res.json().get("value", []),
+            "new_refresh_token": token_result.get("refresh_token"),
+        }
     except Exception as exc:
         return {
             "success": False,

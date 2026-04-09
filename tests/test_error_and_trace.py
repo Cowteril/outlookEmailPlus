@@ -29,6 +29,9 @@ class ErrorAndTraceTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data.get("status"), "ok")
+        # 新增字段：用于前端判断是否发生重启
+        self.assertTrue(data.get("boot_id"))
+        self.assertTrue(data.get("version"))
 
     def test_login_required_returns_structured_error(self):
         client = self.app.test_client()
@@ -400,7 +403,10 @@ class ErrorAndTraceTests(unittest.TestCase):
         self.assertEqual(data.get("success"), False)
         self.assertEqual(data.get("need_verify"), True)
         self.assertEqual(data["error"].get("code"), "EXPORT_VERIFY_IP_MISMATCH")
-        self.assertEqual(data["error"].get("message_en"), "Verification failed because the client IP changed")
+        self.assertEqual(
+            data["error"].get("message_en"),
+            "Verification failed because the client IP changed",
+        )
 
     def test_import_failure_uses_structured_error_contract(self):
         client = self.app.test_client()

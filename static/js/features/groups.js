@@ -32,11 +32,14 @@
                             if (currentGroupId === tempEmailGroupId) {
                                 loadTempEmails(true);
                             } else {
-                                loadAccountsByGroup(currentGroupId, true);
+                                await loadAccountsByGroup(currentGroupId, true);
                             }
                         }
-                    } else {
-                        // 首次进入：自动选中第一个非临时邮箱分组
+                    } else if (currentPage !== 'temp-emails') {
+                        // BUG-06 防御：在临时邮箱页面时，不自动选组。
+                        // 自动选组会调用 selectGroup()，进而清空 currentAccount，
+                        // 导致用户在临时邮箱页选中的邮箱被意外重置。
+                        // 仅在其他页面（mailbox/dashboard 等）才执行首次自动选组。
                         const firstNormalGroup = groups.find(g => !isTempMailboxGroup(g));
                         if (firstNormalGroup) {
                             selectGroup(firstNormalGroup.id);
@@ -89,6 +92,13 @@
         // 选择分组
         async function selectGroup(groupId) {
             currentGroupId = groupId;
+            currentAccountPage = 1;  // 切换分组时重置到第 1 页
+            isSearchMode = false;
+
+            // 切换分组时停止所有正在运行的轮询（避免跨分组轮询堆积）
+            if (typeof stopAllPolls === 'function') {
+                stopAllPolls();
+            }
 
             // 清空搜索框
             const searchInput = document.getElementById('globalSearch');
@@ -135,12 +145,6 @@
                 }
             }
 
-            // 显示「注册Outlook账号」按钮（仅在非临时邮箱分组时）
-            const registerBtn = document.getElementById('registerOutlookBtn');
-            if (registerBtn) {
-                registerBtn.style.display = isTempEmailGroup ? 'none' : '';
-            }
-
             // 更新底部按钮
             updateAccountPanelFooter();
 
@@ -150,6 +154,7 @@
                 navigate('temp-emails');
                 return;
             } else {
+                // 切换分组：加载账号列表（不启动批量轮询）
                 await loadAccountsByGroup(groupId);
             }
         }
@@ -172,6 +177,9 @@
                 if (typeof renderCompactAccountList === 'function') {
                     renderCompactAccountList(accountsCache[groupId]);
                 }
+                // 标准模式：不再在加载分组时批量启动轮询
+                // 轮询仅在用户选中单个账号时启动（selectAccount 中处理）
+                // 这避免了首次加载、导航切换、分组切换时的 N×4 并发 API 请求
                 return;
             }
 
@@ -198,6 +206,9 @@
                     if (forceRefresh) {
                         requestAnimationFrame(() => { container.scrollTop = savedScrollTop; });
                     }
+                    // 标准模式：不再在加载分组时批量启动轮询
+                    // 轮询仅在用户选中单个账号时启动（selectAccount 中处理）
+                    // 这避免了首次加载、导航切换、分组切换时的 N×4 并发 API 请求
                 }
             } catch (error) {
                 container.innerHTML = `<div class="empty-state"><p>${translateAppTextLocal('加载失败')}</p></div>`;
@@ -218,7 +229,8 @@
                 '126': '126 邮箱',
                 yahoo: 'Yahoo 邮箱',
                 aliyun: '阿里邮箱',
-                custom: '自定义 IMAP'
+                custom: '自定义 IMAP',
+                cloudflare_temp_mail: 'CF 临时邮箱'
             };
             return translateAppTextLocal(labels[key] || provider || '未知');
         }
@@ -234,16 +246,19 @@
                         <p>${translateAppTextLocal('该分组暂无邮箱')}</p>
                     </div>
                 `;
-                const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-                if (selectAllCheckbox) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                }
+                updateSelectAllCheckbox();
                 updateBatchActionBar();
                 return;
             }
 
-            // 头像颜色轮转数组 — 8 组渐变色
+            // ===== 分页计算 =====
+            const totalAccounts = accounts.length;
+            const totalPages = Math.ceil(totalAccounts / ACCOUNT_PAGE_SIZE);
+            if (currentAccountPage > totalPages) currentAccountPage = totalPages;
+            if (currentAccountPage < 1) currentAccountPage = 1;
+            const startIdx = (currentAccountPage - 1) * ACCOUNT_PAGE_SIZE;
+            // 只渲染当前页的账号，大幅减少 DOM 节点数
+            const pageAccounts = accounts.slice(startIdx, startIdx + ACCOUNT_PAGE_SIZE);
             const avatarGradients = [
                 ['#B85C38', '#E8734A'],  // 砖红→珊瑚
                 ['#3A7D44', '#5BAF6A'],  // 翠绿→嫩绿
@@ -255,7 +270,7 @@
                 ['#9B6B3E', '#D4A65A'],  // 赭石→沙金
             ];
 
-            container.innerHTML = accounts.map((acc, index) => {
+            container.innerHTML = pageAccounts.map((acc, index) => {
                 const isChecked = selectedAccountIds.has(acc.id);
                 const initial = (acc.email || '?')[0].toUpperCase();
                 const supportsTokenRefresh = isRefreshableOutlookAccount(acc);
@@ -267,6 +282,7 @@
                 const notificationEnabled = acc.notification_enabled !== undefined
                     ? !!acc.notification_enabled
                     : !!acc.telegram_push_enabled;
+                const isCfPoolAccount = String(acc.provider || '').toLowerCase() === 'cloudflare_temp_mail';
 
                 let tokenBadge = `<span class="badge badge-gray">IMAP</span>`;
                 if (supportsTokenRefresh) {
@@ -315,20 +331,70 @@
                             <button class="btn-icon ${notificationEnabled ? 'tg-push-active' : ''}" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, ${!notificationEnabled})" title="${escapeHtml(translateAppTextLocal(notificationEnabled ? '该邮箱通知参与（已开启）' : '开启该邮箱通知参与'))}">🔔</button>
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(acc.email)}', this)" title="${escapeHtml(translateAppTextLocal('验证码'))}" style="font-size:0.72rem;padding:2px 8px;">${escapeHtml(translateAppTextLocal('验证码'))}</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); copyEmail('${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('复制'))}">📋</button>
-                            <button class="btn-icon" onclick="event.stopPropagation(); showEditAccountModal(${acc.id})" title="${escapeHtml(translateAppTextLocal('编辑'))}">✏️</button>
-                            <button class="btn-icon" onclick="event.stopPropagation(); deleteAccount(${acc.id}, '${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('删除'))}" style="color:var(--clr-danger);">🗑️</button>
+                            ${isCfPoolAccount
+                                ? `<button class="btn-icon" disabled title="${escapeHtml(translateAppTextLocal('邮箱池管理的账号不支持编辑'))}" style="opacity:0.3;cursor:not-allowed;">✏️</button>`
+                                : `<button class="btn-icon" onclick="event.stopPropagation(); showEditAccountModal(${acc.id})" title="${escapeHtml(translateAppTextLocal('编辑'))}">✏️</button>`
+                            }
+                            ${isCfPoolAccount
+                                ? `<button class="btn-icon" disabled title="${escapeHtml(translateAppTextLocal('邮箱池管理的账号不支持手动删除'))}" style="opacity:0.3;cursor:not-allowed;color:var(--clr-danger);">🗑️</button>`
+                                : `<button class="btn-icon" onclick="event.stopPropagation(); deleteAccount(${acc.id}, '${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('删除'))}" style="color:var(--clr-danger);">🗑️</button>`
+                            }
                         </div>
                     </div>
                 </div>
             `}).join('');
 
+            // ===== 分页控件：总账号数超过一页时显示 =====
+            if (totalPages > 1) {
+                const paginationEl = document.createElement('div');
+                paginationEl.className = 'account-pagination';
+                paginationEl.innerHTML = `
+                    <button class="page-btn page-btn-prev"
+                            onclick="goToAccountPage(${currentAccountPage - 1})"
+                            ${currentAccountPage <= 1 ? 'disabled' : ''}>
+                        ◀
+                    </button>
+                    <span class="page-info">
+                        ${currentAccountPage} / ${totalPages} ${translateAppTextLocal('页')} &nbsp;·&nbsp; ${translateAppTextLocal('共')} ${totalAccounts} ${translateAppTextLocal('个账号')}
+                    </span>
+                    <button class="page-btn page-btn-next"
+                            onclick="goToAccountPage(${currentAccountPage + 1})"
+                            ${currentAccountPage >= totalPages ? 'disabled' : ''}>
+                        ▶
+                    </button>
+                `;
+                container.appendChild(paginationEl);
+            }
+
             updateSelectAllCheckbox();
             updateBatchActionBar();
+            // 如果有正在运行的轮询，重新显示轮询指示器（账号列表重渲染后会丢失绿点）
+            if (typeof reapplyAllPollUI === 'function') {
+                reapplyAllPollUI();
+            }
+        }
+
+        // 跳转到指定账号分页
+        function goToAccountPage(page) {
+            if (!accountsCache[currentGroupId]) return;
+            const accounts = applyFiltersAndSort(accountsCache[currentGroupId]);
+            const totalPages = Math.ceil(accounts.length / ACCOUNT_PAGE_SIZE);
+            if (page < 1 || page > totalPages) return;
+            currentAccountPage = page;
+            renderAccountList(accounts);
+            // 滚动到账号列表顶部
+            const container = document.getElementById('accountList');
+            if (container) container.scrollTop = 0;
         }
 
         // 排序相关变量
         let currentSortBy = 'refresh_time';
         let currentSortOrder = 'asc';
+
+        // 账号列表分页状态
+        let currentAccountPage = 1;
+        const ACCOUNT_PAGE_SIZE = 50;
+        let isSearchMode = false;
 
         // 排序账号列表
         function sortAccounts(sortBy) {
@@ -352,6 +418,7 @@
 
             // 重新加载并排序账号列表
             if (accountsCache[currentGroupId]) {
+                currentAccountPage = 1;  // 排序时重置到第 1 页
                 const sortedAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
                 renderAccountList(sortedAccounts);
             }
@@ -394,6 +461,7 @@
         // Tag Filter Change Handler
         function handleTagFilterChange() {
             if (accountsCache[currentGroupId]) {
+                currentAccountPage = 1;  // 标签过滤时重置到第 1 页
                 const filteredAccounts = applyFiltersAndSort(accountsCache[currentGroupId]);
                 renderAccountList(filteredAccounts);
             }
@@ -414,9 +482,13 @@
             const titleElement = document.getElementById('currentGroupName');
 
             if (!query.trim()) {
+                isSearchMode = false;
+                currentAccountPage = 1;  // 清空搜索时重置页码
                 loadAccountsByGroup(currentGroupId);
                 return;
             }
+
+            isSearchMode = true;
 
             container.innerHTML = '<div class="loading-overlay"><span class="spinner"></span> 搜索中…</div>';
 
@@ -425,6 +497,7 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    currentAccountPage = 1;  // 搜索结果重置到第 1 页
                     titleElement.textContent = `搜索结果 (${data.accounts.length})`;
                     renderAccountList(data.accounts);
                 } else {
@@ -588,8 +661,42 @@
 
         // ==================== 全选功能 ====================
 
+        function getCurrentAccountScopeIds() {
+            const source = Array.isArray(accountsCache[currentGroupId])
+                ? applyFiltersAndSort(accountsCache[currentGroupId])
+                : [];
+            return source
+                .map(acc => Number(acc && acc.id))
+                .filter(id => Number.isInteger(id) && id > 0);
+        }
+
+        function getCurrentAccountScopeStats() {
+            const scopeIds = getCurrentAccountScopeIds();
+            const selectedInScope = scopeIds.filter(id => selectedAccountIds.has(id)).length;
+            return {
+                scopeCount: scopeIds.length,
+                selectedInScope,
+                allSelected: scopeIds.length > 0 && selectedInScope === scopeIds.length,
+                noneSelected: selectedInScope === 0,
+            };
+        }
+
+        function syncActiveCheckboxesFromSelection() {
+            const checkboxes = getActiveAccountCheckboxes();
+            checkboxes.forEach(cb => {
+                const id = Number(cb.value);
+                cb.checked = selectedAccountIds.has(id);
+            });
+        }
+
         // 全选/取消全选账号（当前分组）
         function toggleSelectAll() {
+            if (isSearchMode) {
+                showToast(translateAppTextLocal('搜索模式下不支持全选本分组，请先清空搜索'), 'warning');
+                updateSelectAllCheckbox();
+                return;
+            }
+
             const selectAllCheckbox = mailboxViewMode === 'compact'
                 ? document.getElementById('compactSelectAllCheckbox')
                 : document.getElementById('selectAllCheckbox');
@@ -603,43 +710,35 @@
 
         // 全选当前分组所有账号
         function selectAllAccounts() {
-            const checkboxes = getActiveAccountCheckboxes();
-            checkboxes.forEach(cb => {
-                cb.checked = true;
-                selectedAccountIds.add(parseInt(cb.value));
-            });
+            const scopeIds = getCurrentAccountScopeIds();
+            scopeIds.forEach(id => selectedAccountIds.add(id));
+            syncActiveCheckboxesFromSelection();
             updateBatchActionBar();
             updateSelectAllCheckbox();
         }
 
         // 取消全选当前分组
         function unselectAllAccounts() {
-            const checkboxes = getActiveAccountCheckboxes();
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                selectedAccountIds.delete(parseInt(cb.value));
-            });
+            const scopeIds = getCurrentAccountScopeIds();
+            scopeIds.forEach(id => selectedAccountIds.delete(id));
+            syncActiveCheckboxesFromSelection();
             updateBatchActionBar();
             updateSelectAllCheckbox();
         }
 
         // 更新全选复选框状态（基于当前分组）
         function updateSelectAllCheckbox() {
-            const checkboxes = getActiveAccountCheckboxes();
-            const checkedCount = checkboxes.filter(cb => cb.checked).length;
+            const stats = getCurrentAccountScopeStats();
             const selectAllCheckboxes = [
                 document.getElementById('selectAllCheckbox'),
                 document.getElementById('compactSelectAllCheckbox')
             ].filter(Boolean);
 
             selectAllCheckboxes.forEach(selectAllCheckbox => {
-                if (checkboxes.length === 0) {
+                if (stats.scopeCount === 0 || stats.noneSelected) {
                     selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                } else if (checkedCount === 0) {
-                    selectAllCheckbox.checked = false;
-                    selectAllCheckbox.indeterminate = selectedAccountIds.size > 0;
-                } else if (checkedCount === checkboxes.length) {
+                    selectAllCheckbox.indeterminate = false;
+                } else if (stats.allSelected) {
                     selectAllCheckbox.checked = true;
                     selectAllCheckbox.indeterminate = false;
                 } else {
@@ -752,10 +851,35 @@
         // 复制验证信息到剪贴板
         const verificationCopyInFlight = new Set();
 
-        async function copyVerificationInfo(email, buttonElement) {
+        function buildVerificationExtractEndpoint(email, options = {}) {
+            const normalizedSource = String(options?.source || '').trim().toLowerCase();
+            if (normalizedSource === 'temp' || normalizedSource === 'temp-mail' || normalizedSource === 'temp_mail') {
+                return `/api/temp-emails/${encodeURIComponent(email)}/extract-verification`;
+            }
+            return `/api/emails/${encodeURIComponent(email)}/extract-verification`;
+        }
+
+        async function tryFallbackVerificationExtraction(options = {}) {
+            if (typeof options.fallbackExtractor !== 'function') {
+                return null;
+            }
+
+            try {
+                const fallbackResult = await options.fallbackExtractor();
+                if (!fallbackResult || !fallbackResult.formatted) {
+                    return null;
+                }
+                return fallbackResult;
+            } catch (fallbackError) {
+                console.error('本地兜底提取失败:', fallbackError);
+                return null;
+            }
+        }
+
+        async function copyVerificationInfo(email, buttonElement, options = {}) {
             const requestKey = String(email || '').trim().toLowerCase();
             if (!requestKey || verificationCopyInFlight.has(requestKey)) {
-                return;
+                return false;
             }
             verificationCopyInFlight.add(requestKey);
 
@@ -767,7 +891,7 @@
             buttonElement.style.cursor = 'wait';
 
             try {
-                const response = await fetch(`/api/emails/${encodeURIComponent(email)}/extract-verification`);
+                const response = await fetch(buildVerificationExtractEndpoint(email, options));
                 const data = await response.json();
 
                 if (data.success && data.data && data.data.formatted) {
@@ -782,7 +906,25 @@
                     // 成功状态
                     buttonElement.innerHTML = '✅';
                     buttonElement.style.opacity = '1';
+                    return true;
                 } else {
+                    const fallbackResult = await tryFallbackVerificationExtraction(options);
+                    if (fallbackResult) {
+                        await copyToClipboard(
+                            fallbackResult.copyText || fallbackResult.verification_code || fallbackResult.verification_link || fallbackResult.formatted
+                        );
+                        const copiedValue = fallbackResult.displayValue || fallbackResult.verification_code || fallbackResult.verification_link || fallbackResult.formatted;
+                        showToast(
+                            getUiLanguage() === 'en'
+                                ? `Copied from current email: ${copiedValue}`
+                                : `已从当前邮件兜底复制: ${copiedValue}`,
+                            'warning'
+                        );
+                        buttonElement.innerHTML = '✅';
+                        buttonElement.style.opacity = '1';
+                        return true;
+                    }
+
                     const errorMsg = window.resolveApiErrorMessage
                         ? window.resolveApiErrorMessage(data.error || data, '未找到验证码或链接', 'No verification code or link was found')
                         : (data.error?.message || data.error || '未找到验证码或链接');
@@ -790,13 +932,31 @@
                     // 失败状态
                     buttonElement.innerHTML = '❌';
                     buttonElement.style.opacity = '1';
+                    return false;
                 }
             } catch (error) {
                 console.error('提取验证码失败:', error);
+                const fallbackResult = await tryFallbackVerificationExtraction(options);
+                if (fallbackResult) {
+                    await copyToClipboard(
+                        fallbackResult.copyText || fallbackResult.verification_code || fallbackResult.verification_link || fallbackResult.formatted
+                    );
+                    const copiedValue = fallbackResult.displayValue || fallbackResult.verification_code || fallbackResult.verification_link || fallbackResult.formatted;
+                    showToast(
+                        getUiLanguage() === 'en'
+                            ? `Copied from current email: ${copiedValue}`
+                            : `已从当前邮件兜底复制: ${copiedValue}`,
+                        'warning'
+                    );
+                    buttonElement.innerHTML = '✅';
+                    buttonElement.style.opacity = '1';
+                    return true;
+                }
                 showToast(translateAppTextLocal('网络错误，请重试'), 'error');
                 // 失败状态
                 buttonElement.innerHTML = '❌';
                 buttonElement.style.opacity = '1';
+                return false;
             } finally {
                 verificationCopyInFlight.delete(requestKey);
                 // 延迟恢复按钮状态
@@ -829,4 +989,14 @@
                 throw error;
             }
         }
+
+        // Fix: #accountList 在 i18n skip 列表中，MutationObserver 不会自动翻译。
+        // 切换语言时必须手动重渲染账号列表，否则账号卡片文字保留旧语言（如
+        // Unknown / 16 hours ago 混搭中文）。简洁模式已在 mailbox_compact.js 正确处理，
+        // 此处补全标准模式。
+        window.addEventListener('ui-language-changed', () => {
+            if (accountsCache[currentGroupId]) {
+                renderAccountList(applyFiltersAndSort(accountsCache[currentGroupId]));
+            }
+        });
 

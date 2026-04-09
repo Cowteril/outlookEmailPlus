@@ -34,9 +34,13 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
             audit,
             emails,
             external_pool,
+            external_temp_emails,
             groups,
+<<<<<<< HEAD
             jobs,
             oauth,
+=======
+>>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
             pages,
             scheduler,
             settings,
@@ -115,13 +119,33 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_error_handler(HTTPException, handle_http_exception)
         app.register_error_handler(Exception, handle_exception)
 
+        # 静态文件缓存控制（防止浏览器缓存旧版本 JS/CSS）
+        @app.after_request
+        def set_static_cache_control(response):
+            """
+            为静态文件设置合理的缓存策略：
+            - 带版本号参数的静态文件可以长期缓存（1年）
+            - 没有版本号的静态文件使用短期缓存（1小时）+ must-revalidate
+            """
+            from flask import request
+
+            if request.path.startswith("/static/"):
+                # 检查是否带版本号参数（?v=x.x.x）
+                has_version_param = "v=" in (request.query_string or b"").decode("utf-8", errors="ignore")
+                if has_version_param:
+                    # 带版本号：可以长期缓存（immutable）
+                    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                else:
+                    # 不带版本号：短期缓存 + 必须重新验证
+                    response.headers["Cache-Control"] = "public, max-age=3600, must-revalidate"
+            return response
+
         # Blueprint 路由注册（URL 不变）
         app.register_blueprint(pages.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(groups.create_blueprint())
         app.register_blueprint(tags.create_blueprint())
         app.register_blueprint(accounts.create_blueprint())
         app.register_blueprint(emails.create_blueprint())
-        app.register_blueprint(oauth.create_blueprint())
         app.register_blueprint(temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(settings.create_blueprint())
         app.register_blueprint(scheduler.create_blueprint())
@@ -129,12 +153,13 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_blueprint(system.create_blueprint())
         app.register_blueprint(audit.create_blueprint())
         app.register_blueprint(external_pool.create_blueprint(csrf_exempt=csrf_exempt))
+        app.register_blueprint(external_temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
 
         # 打印初始化信息
         print("=" * 60)
         print("Outlook 邮件 Web 应用已初始化")
         print(f"数据库文件: {config.get_database_path()}")
-        print(f"GPTMail API: {config.get_gptmail_base_url()}")
+        print(f"Temp Mail API: {config.get_temp_mail_base_url()}")
         print("=" * 60)
 
         _APP_INSTANCE = app

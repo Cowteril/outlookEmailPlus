@@ -13,8 +13,17 @@ from outlook_web.repositories import groups as groups_repo
 from outlook_web.security.auth import get_external_api_consumer
 from outlook_web.services import graph as graph_service
 from outlook_web.services import imap as imap_service
-from outlook_web.services.imap_generic import get_email_detail_imap_generic_result, get_emails_imap_generic
-from outlook_web.services.verification_extractor import extract_email_text, extract_verification_info_with_options
+from outlook_web.services import mailbox_resolver
+from outlook_web.services.imap_generic import (
+    get_email_detail_imap_generic_result,
+    get_emails_imap_generic,
+)
+from outlook_web.services.temp_mail_service import TempMailError, get_temp_mail_service
+from outlook_web.services.verification_extractor import (
+    apply_confidence_gate,
+    extract_email_text,
+    extract_verification_info_with_options,
+)
 
 # Outlook IMAP 回退服务器（保持与内部接口一致）
 IMAP_SERVER_NEW = "outlook.live.com"
@@ -22,6 +31,16 @@ IMAP_SERVER_OLD = "outlook.office365.com"
 
 # wait-message 约束
 MAX_TIMEOUT_SECONDS = 120
+
+
+def _can_check_external_access() -> bool:
+    try:
+        from outlook_web.db import get_db
+
+        get_db()
+        return True
+    except Exception:
+        return False
 
 
 class ExternalApiError(Exception):
@@ -77,6 +96,21 @@ class EmailScopeForbiddenError(ExternalApiError):
 class AccountAccessForbiddenError(ExternalApiError):
     code = "ACCOUNT_ACCESS_FORBIDDEN"
     status = 403
+
+
+class TaskFinishedError(ExternalApiError):
+    code = "TASK_FINISHED"
+    status = 409
+
+
+class ProbeCancelledError(ExternalApiError):
+    code = "PROBE_CANCELLED"
+    status = 409
+
+
+class MailboxConflictError(ExternalApiError):
+    code = "MAILBOX_CONFLICT"
+    status = 409
 
 
 def ok(data: Any = None, *, message: str = "success") -> Dict[str, Any]:
@@ -142,19 +176,34 @@ def get_current_external_api_consumer() -> Dict[str, Any]:
     return get_external_api_consumer() or {}
 
 
-def ensure_external_email_access(email_addr: str) -> None:
+def ensure_external_email_access(email_addr: str, *, allow_finished: bool = False) -> None:
+    ensure_external_email_scope(email_addr, allow_finished=allow_finished)
+    mailbox = mailbox_resolver.resolve_mailbox(email_addr)
+    mailbox_resolver.ensure_mailbox_can_read(
+        mailbox,
+        consumer=get_current_external_api_consumer(),
+        allow_finished=allow_finished,
+    )
+
+
+def ensure_external_email_scope(email_addr: str, *, allow_finished: bool = False) -> None:
+    mailbox = mailbox_resolver.resolve_mailbox(email_addr)
     consumer = get_current_external_api_consumer()
-    allowed_emails = [str(item or "").strip().lower() for item in (consumer.get("allowed_emails") or [])]
-    target_email = str(email_addr or "").strip().lower()
-    if allowed_emails and target_email not in allowed_emails:
-        raise EmailScopeForbiddenError(
-            "当前 API Key 无权访问该邮箱",
-            data={
-                "email": email_addr,
-                "consumer_id": consumer.get("id"),
-                "consumer_name": consumer.get("name"),
-            },
-        )
+    if mailbox.get("kind") == "account":
+        allowed_emails = [str(item or "").strip().lower() for item in (consumer.get("allowed_emails") or [])]
+        target_email = str(email_addr or "").strip().lower()
+        if allowed_emails and target_email not in allowed_emails:
+            raise EmailScopeForbiddenError(
+                "当前 API Key 无权访问该邮箱",
+                data={
+                    "email": email_addr,
+                    "consumer_id": consumer.get("id"),
+                    "consumer_name": consumer.get("name"),
+                },
+            )
+        return
+
+    mailbox_resolver.ensure_mailbox_can_read(mailbox, consumer=consumer, allow_finished=allow_finished)
 
 
 def _build_message_summary(email_addr: str, item: Dict[str, Any], *, method: str) -> Dict[str, Any]:
@@ -421,10 +470,26 @@ def list_messages_for_external(
     skip: int = 0,
     top: int = 20,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    account = ensure_account_can_read(require_account(email_addr))
+    mailbox = mailbox_resolver.resolve_mailbox(email_addr)
+    mailbox_meta = mailbox_resolver.ensure_mailbox_can_read(mailbox, consumer=get_current_external_api_consumer())
     folder = (folder or "inbox").strip().lower() or "inbox"
     skip = max(0, int(skip or 0))
     top = max(1, min(int(top or 20), 50))
+
+    if mailbox.get("kind") == "temp":
+        service = get_temp_mail_service()
+        try:
+            messages = service.list_messages(mailbox, sync_remote=True)
+        except TempMailError as exc:
+            raise UpstreamReadFailedError(
+                "临时邮箱上游读取失败" if exc.code == "TEMP_EMAIL_UPSTREAM_READ_FAILED" else exc.message,
+                data=exc.data,
+            ) from exc
+        sliced = messages[skip : skip + top]  # noqa: E203
+        method_label = str(sliced[0].get("method") or "Temp Mail") if sliced else "Temp Mail"
+        return sliced, method_label
+
+    account = mailbox_meta
 
     account_type = (account.get("account_type") or "outlook").strip().lower()
     if account_type == "imap":
@@ -460,7 +525,10 @@ def list_messages_for_external(
         return emails, method_label
 
     graph_error = graph_result.get("error")
-    if isinstance(graph_error, dict) and graph_error.get("type") in ("ProxyError", "ConnectionError"):
+    if isinstance(graph_error, dict) and graph_error.get("type") in (
+        "ProxyError",
+        "ConnectionError",
+    ):
         raise ProxyError("代理连接失败", data=graph_error)
 
     # Graph 失败 → IMAP(New) → IMAP(Old) 回退
@@ -494,16 +562,21 @@ def list_messages_for_external(
 
     raise UpstreamReadFailedError(
         "Graph/IMAP 均读取失败",
-        data={"graph": graph_error, "imap_new": imap_new_result.get("error"), "imap_old": imap_old_result.get("error")},
+        data={
+            "graph": graph_error,
+            "imap_new": imap_new_result.get("error"),
+            "imap_old": imap_old_result.get("error"),
+        },
     )
 
 
-def filter_messages(
+def filter_messages(  # noqa: C901
     emails: List[Dict[str, Any]],
     *,
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     from_contains = (from_contains or "").strip().lower()
     subject_contains = (subject_contains or "").strip().lower()
@@ -531,6 +604,11 @@ def filter_messages(
             if dt and dt < since_dt:
                 continue
 
+        # PR#27: claim_token baseline 过滤——只保留 claimed_at 之后的邮件
+        if baseline_timestamp is not None and baseline_timestamp > 0:
+            if int(e.get("timestamp") or 0) < baseline_timestamp:
+                continue
+
         filtered.append(e)
     return filtered
 
@@ -542,6 +620,7 @@ def get_latest_message_for_external(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> Dict[str, Any]:
     emails = list_messages_for_external(email_addr=email_addr, folder=folder, skip=0, top=20)[0]
     filtered = filter_messages(
@@ -549,6 +628,7 @@ def get_latest_message_for_external(
         from_contains=from_contains,
         subject_contains=subject_contains,
         since_minutes=since_minutes,
+        baseline_timestamp=baseline_timestamp,
     )
     if not filtered:
         raise MailNotFoundError("未找到匹配邮件", data={"email": email_addr})
@@ -557,18 +637,32 @@ def get_latest_message_for_external(
     return filtered[0]
 
 
-def get_message_detail_for_external(
+def get_message_detail_for_external(  # noqa: C901
     *,
     email_addr: str,
     message_id: str,
     folder: str = "inbox",
 ) -> Dict[str, Any]:
-    account = ensure_account_can_read(require_account(email_addr))
+    mailbox = mailbox_resolver.resolve_mailbox(email_addr)
+    mailbox_meta = mailbox_resolver.ensure_mailbox_can_read(mailbox, consumer=get_current_external_api_consumer())
     message_id = (message_id or "").strip()
     if not message_id:
         raise InvalidParamError("message_id 不能为空")
 
     folder = (folder or "inbox").strip().lower() or "inbox"
+    if mailbox.get("kind") == "temp":
+        service = get_temp_mail_service()
+        try:
+            return service.refresh_message_detail(mailbox, message_id)
+        except TempMailError as exc:
+            if exc.code == "TEMP_EMAIL_MESSAGE_NOT_FOUND":
+                raise MailNotFoundError(exc.message, data={"email": email_addr, "message_id": message_id}) from exc
+            raise UpstreamReadFailedError(
+                "临时邮箱上游读取失败" if exc.code == "TEMP_EMAIL_UPSTREAM_READ_FAILED" else exc.message,
+                data=exc.data,
+            ) from exc
+
+    account = mailbox_meta
     account_type = (account.get("account_type") or "outlook").strip().lower()
 
     if account_type == "imap":
@@ -703,6 +797,7 @@ def get_verification_result(
     code_regex: str | None = None,
     code_length: str | None = None,
     code_source: str = "all",
+    baseline_timestamp: Optional[int] = None,
 ) -> Dict[str, Any]:
     latest_summary = get_latest_message_for_external(
         email_addr=email_addr,
@@ -710,6 +805,7 @@ def get_verification_result(
         from_contains=from_contains,
         subject_contains=subject_contains,
         since_minutes=since_minutes,
+        baseline_timestamp=baseline_timestamp,
     )
     message_id = str(latest_summary.get("id") or "")
     method = str(latest_summary.get("method") or "")
@@ -729,14 +825,8 @@ def get_verification_result(
         code_source=code_source,
     )
 
-    # ── 可信度门控：非高置信度结果不作为 external API 成功输出 ──
-    if extracted.get("code_confidence") != "high":
-        extracted["verification_code"] = None
-    if extracted.get("link_confidence") != "high":
-        extracted["verification_link"] = None
-    # 重算 formatted（与清零后的值保持一致）
-    parts = [v for v in (extracted.get("verification_code"), extracted.get("verification_link")) if v]
-    extracted["formatted"] = " ".join(parts) if parts else None
+    # ── 可信度门控：与临时邮箱提取路径使用统一逻辑 ──
+    extracted = apply_confidence_gate(extracted)
 
     extracted["email"] = email_addr
     extracted["matched_email_id"] = message_id
@@ -747,7 +837,7 @@ def get_verification_result(
     return extracted
 
 
-def wait_for_message(
+def wait_for_message(  # noqa: C901
     *,
     email_addr: str,
     timeout_seconds: int = 30,
@@ -756,6 +846,7 @@ def wait_for_message(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> Dict[str, Any]:
     try:
         timeout_seconds = int(timeout_seconds)
@@ -768,18 +859,25 @@ def wait_for_message(
     if poll_interval <= 0 or poll_interval > timeout_seconds:
         raise InvalidParamError("poll_interval 参数无效")
 
-    # 记录进入等待接口时的时间戳，避免把请求开始前已存在的旧邮件误判成“新到达”。
-    baseline_timestamp = int(time.time())
+    # 记录进入等待接口时的时间戳，避免把请求开始前已存在的旧邮件误判成"新到达"。
+    # 如果调用方已通过 claim_token 传入 baseline_timestamp，优先使用（更早的基准）。
+    if _can_check_external_access():
+        ensure_external_email_access(email_addr)
+    if baseline_timestamp is None or baseline_timestamp <= 0:
+        baseline_timestamp = int(time.time())
     start = time.time()
     last_error: Optional[ExternalApiError] = None
     while True:
         try:
+            if _can_check_external_access():
+                ensure_external_email_access(email_addr)
             latest_message = get_latest_message_for_external(
                 email_addr=email_addr,
                 folder=folder,
                 from_contains=from_contains,
                 subject_contains=subject_contains,
                 since_minutes=since_minutes,
+                baseline_timestamp=baseline_timestamp,
             )
             if int(latest_message.get("timestamp") or 0) >= baseline_timestamp:
                 return latest_message
@@ -823,6 +921,7 @@ def create_probe(
     from_contains: str = "",
     subject_contains: str = "",
     since_minutes: Optional[int] = None,
+    baseline_timestamp: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     创建一个异步探测请求，后台 worker 会定期轮询直到匹配或超时。
@@ -834,20 +933,24 @@ def create_probe(
 
     _validate_probe_params(email_addr, timeout_seconds, poll_interval)
 
-    # 检查账号是否存在
-    ensure_account_can_read(require_account(email_addr))
+    mailbox = mailbox_resolver.resolve_mailbox(email_addr)
+    mailbox_resolver.ensure_mailbox_can_read(mailbox, consumer=get_current_external_api_consumer())
 
     probe_id = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=int(timeout_seconds))
+
+    # PR#27：若传入了 baseline_timestamp，使用它；否则使用 now 作为基准
+    effective_baseline = baseline_timestamp if (baseline_timestamp and baseline_timestamp > 0) else int(now.timestamp())
 
     db = get_db()
     db.execute(
         """
         INSERT INTO external_probe_cache
             (id, email_addr, folder, from_contains, subject_contains,
-             since_minutes, timeout_seconds, poll_interval, status, expires_at, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+             since_minutes, timeout_seconds, poll_interval, status, expires_at, created_at, updated_at,
+             baseline_timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
         """,
         (
             probe_id,
@@ -861,6 +964,7 @@ def create_probe(
             expires_at.isoformat(),
             now.isoformat(),
             now.isoformat(),
+            effective_baseline,
         ),
     )
     db.commit()
@@ -870,6 +974,7 @@ def create_probe(
         "status": "pending",
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
         "poll_url": f"/api/external/probe/{probe_id}",
+        "baseline_timestamp": effective_baseline,
     }
 
 
@@ -905,8 +1010,35 @@ def get_probe_status(probe_id: str) -> Dict[str, Any]:
     elif row["status"] == "error":
         result["error_code"] = row["error_code"] or "PROBE_ERROR"
         result["error_message"] = row["error_message"] or "探测过程中发生错误"
+    elif row["status"] == "cancelled":
+        result["error_code"] = row["error_code"] or "PROBE_CANCELLED"
+        result["error_message"] = row["error_message"] or "探测因任务结束而被取消"
 
     return result
+
+
+def cancel_pending_probes_for_email(
+    email_addr: str,
+    *,
+    error_code: str = "PROBE_CANCELLED",
+    error_message: str = "探测因任务结束而被取消",
+) -> int:
+    from outlook_web.db import get_db
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        UPDATE external_probe_cache
+        SET status = 'cancelled',
+            error_code = ?,
+            error_message = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE email_addr = ? AND status = 'pending'
+        """,
+        (error_code, error_message, email_addr),
+    )
+    db.commit()
+    return cursor.rowcount
 
 
 def _mark_expired_pending_probes(db: Any, now: str) -> None:
@@ -936,6 +1068,14 @@ def _load_pending_probe_rows(db: Any, now: str, *, limit: int = 50) -> list[Any]
 
 
 def _get_probe_baseline_timestamp(row: Any) -> int:
+    # PR#27：若 probe 创建时传入了 baseline_timestamp（来自 claim_token），优先使用
+    try:
+        stored = row["baseline_timestamp"]
+        if stored is not None and int(stored) > 0:
+            return int(stored)
+    except (TypeError, KeyError, ValueError):
+        pass
+    # 回退：从 created_at 推算
     try:
         created_str = row["created_at"] or ""
         if created_str.endswith("Z"):
@@ -1043,6 +1183,94 @@ def cleanup_expired_probes(app: Any = None, max_age_minutes: int = 30) -> int:
     finally:
         if ctx is not None:
             ctx.pop()
+
+
+def claimed_at_to_timestamp(claimed_at: str) -> Optional[int]:
+    """将 claimed_at ISO string 转为 Unix timestamp（整数），解析失败返回 None。"""
+    if not claimed_at:
+        return None
+    try:
+        dt = _parse_datetime(claimed_at)
+        if dt:
+            return int(dt.timestamp())
+    except Exception:
+        pass
+    return None
+
+
+def resolve_external_mail_scope(
+    email_addr: Optional[str],
+    claim_token: Optional[str],
+    *,
+    allow_finished: bool = False,
+) -> tuple[str, Optional[int]]:
+    """
+    根据 email_addr 或 claim_token 确定目标邮箱地址和 baseline_timestamp。
+
+    返回 (email_addr, baseline_timestamp) 元组。
+    - 若提供 claim_token，从领取上下文获取 email 和 claimed_at 时间戳。
+    - claim_token 与 email_addr 若同时存在，claim_token 优先。
+    - claimed_at 作为邮件读取的 baseline（避免读到领取之前的旧邮件）。
+    """
+    from outlook_web.services.pool import get_claim_context
+
+    baseline: Optional[int] = None
+
+    if claim_token and claim_token.strip():
+        ctx = get_claim_context(claim_token=claim_token.strip())
+        if ctx is None:
+            raise InvalidParamError("claim_token 无效或已过期", data={"claim_token": claim_token})
+        resolved_email = ctx.get("email") or ""
+        if not resolved_email:
+            raise InvalidParamError("claim_token 对应账号无邮箱地址")
+        # 若 email_addr 也有值，校验一致性
+        if email_addr and email_addr.strip() and email_addr.strip().lower() != resolved_email.lower():
+            raise InvalidParamError(
+                "claim_token 与 email 不一致",
+                data={"email": email_addr, "claim_token_email": resolved_email},
+            )
+        email_addr = resolved_email
+        baseline = claimed_at_to_timestamp(ctx.get("claimed_at") or "")
+
+    if not email_addr or "@" not in (email_addr or ""):
+        raise InvalidParamError("email 参数无效")
+
+    ensure_external_email_access(email_addr, allow_finished=allow_finished)
+    return email_addr, baseline
+
+
+def record_claim_read_context(
+    *,
+    claim_token: Optional[str],
+    email_addr: str,
+) -> None:
+    """
+    当通过 claim_token 读取邮件时，记录一条 read 日志（用于审计和 debug）。
+    若无 claim_token 则静默跳过。
+    """
+    if not claim_token or not claim_token.strip():
+        return
+    try:
+        from outlook_web.services.pool import (
+            append_claim_read_context,
+            get_claim_context,
+        )
+
+        ctx = get_claim_context(claim_token=claim_token.strip())
+        if ctx is None:
+            return
+        consumer = get_current_external_api_consumer() or {}
+        caller_id = str(consumer.get("consumer_key") or consumer.get("name") or "")
+        task_id = ""
+        append_claim_read_context(
+            account_id=ctx["account_id"],
+            claim_token=claim_token.strip(),
+            caller_id=caller_id,
+            task_id=task_id,
+            detail=f"read via external API, email={email_addr}",
+        )
+    except Exception:
+        pass
 
 
 def audit_external_api_access(

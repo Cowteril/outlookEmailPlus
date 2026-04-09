@@ -12,7 +12,11 @@ from flask import Response, g, jsonify, request
 from outlook_web import config
 from outlook_web.audit import log_audit
 from outlook_web.db import get_db
-from outlook_web.errors import build_error_payload, build_error_response, build_export_verify_failure_response
+from outlook_web.errors import (
+    build_error_payload,
+    build_error_response,
+    build_export_verify_failure_response,
+)
 from outlook_web.repositories import accounts as accounts_repo
 from outlook_web.repositories import groups as groups_repo
 from outlook_web.repositories import refresh_logs as refresh_logs_repo
@@ -196,7 +200,12 @@ def api_get_account(account_id: int) -> Any:
     """获取单个账号详情"""
     account = accounts_repo.get_account_by_id(account_id)
     if not account:
-        return build_error_response("ACCOUNT_NOT_FOUND", "账号不存在", message_en="Account not found", status=404)
+        return build_error_response(
+            "ACCOUNT_NOT_FOUND",
+            "账号不存在",
+            message_en="Account not found",
+            status=404,
+        )
 
     return jsonify(
         {
@@ -245,7 +254,9 @@ def api_add_account() -> Any:
 
     if not account_str:
         return build_error_response(
-            "ACCOUNT_IMPORT_INPUT_REQUIRED", "请输入账号信息", message_en="Please enter account information"
+            "ACCOUNT_IMPORT_INPUT_REQUIRED",
+            "请输入账号信息",
+            message_en="Please enter account information",
         )
 
     # FD-00006: auto 模式允许 group_id=null（自动分组），需在分组校验前分流
@@ -294,6 +305,25 @@ def api_add_account() -> Any:
 
     # 支持批量导入（多行）+ 逐行校验与错误定位
     raw_lines = account_str.splitlines()
+
+    # 合并续行：从其他地方复制的凭据中 refresh_token 可能包含换行符（行宽折行），
+    # splitlines() 会将其切碎；续行特征：不含 '----' 分隔符且不是注释行
+    merged_lines: list[str] = []
+    for _line in raw_lines:
+        _stripped = _line.strip()
+        if not _stripped:
+            continue
+        if (
+            merged_lines
+            and not merged_lines[-1].lstrip().startswith("#")
+            and "----" not in _stripped
+            and not _stripped.startswith("#")
+        ):
+            merged_lines[-1] += _stripped
+        else:
+            merged_lines.append(_stripped)
+    raw_lines = merged_lines
+
     imported = 0
     failed = 0
     errors: List[Dict[str, Any]] = []
@@ -355,7 +385,13 @@ def api_add_account() -> Any:
                 failed += 1
                 errors_total += 1
                 if len(errors) < max_error_details:
-                    errors.append({"line": line_no, "email": email_addr, "error": "邮箱格式不正确"})
+                    errors.append(
+                        {
+                            "line": line_no,
+                            "email": email_addr,
+                            "error": "邮箱格式不正确",
+                        }
+                    )
                 continue
 
             imap_host = default_imap_host
@@ -373,7 +409,13 @@ def api_add_account() -> Any:
                         failed += 1
                         errors_total += 1
                         if len(errors) < max_error_details:
-                            errors.append({"line": line_no, "email": email_addr, "error": "custom 5段格式缺少 IMAP 端口"})
+                            errors.append(
+                                {
+                                    "line": line_no,
+                                    "email": email_addr,
+                                    "error": "custom 5段格式缺少 IMAP 端口",
+                                }
+                            )
                         continue
                     imap_port = _parse_imap_port(raw_port)
                     if imap_port is None:
@@ -381,7 +423,11 @@ def api_add_account() -> Any:
                         errors_total += 1
                         if len(errors) < max_error_details:
                             errors.append(
-                                {"line": line_no, "email": email_addr, "error": "custom IMAP 端口无效，应为 1-65535"}
+                                {
+                                    "line": line_no,
+                                    "email": email_addr,
+                                    "error": "custom IMAP 端口无效，应为 1-65535",
+                                }
                             )
                         continue
                 elif len(parts) >= 4:
@@ -391,7 +437,13 @@ def api_add_account() -> Any:
                         failed += 1
                         errors_total += 1
                         if len(errors) < max_error_details:
-                            errors.append({"line": line_no, "email": email_addr, "error": "custom 4段格式缺少 IMAP 端口"})
+                            errors.append(
+                                {
+                                    "line": line_no,
+                                    "email": email_addr,
+                                    "error": "custom 4段格式缺少 IMAP 端口",
+                                }
+                            )
                         continue
                     imap_port = _parse_imap_port(raw_port)
                     if imap_port is None:
@@ -399,7 +451,11 @@ def api_add_account() -> Any:
                         errors_total += 1
                         if len(errors) < max_error_details:
                             errors.append(
-                                {"line": line_no, "email": email_addr, "error": "custom IMAP 端口无效，应为 1-65535"}
+                                {
+                                    "line": line_no,
+                                    "email": email_addr,
+                                    "error": "custom IMAP 端口无效，应为 1-65535",
+                                }
                             )
                         continue
                 else:
@@ -453,7 +509,13 @@ def api_add_account() -> Any:
                 failed += 1
                 errors_total += 1
                 if len(errors) < max_error_details:
-                    errors.append({"line": line_no, "email": email_addr, "error": _outlook_basic_auth_import_error()})
+                    errors.append(
+                        {
+                            "line": line_no,
+                            "email": email_addr,
+                            "error": _outlook_basic_auth_import_error(),
+                        }
+                    )
                 continue
 
             ok = accounts_repo.add_account(
@@ -520,7 +582,14 @@ def api_add_account() -> Any:
                 None,
                 f"{message}，目标分组ID={group_id}，provider={provider}",
             )
-            return jsonify({"success": True, "message": message, "summary": summary, "errors": errors})
+            return jsonify(
+                {
+                    "success": True,
+                    "message": message,
+                    "summary": summary,
+                    "errors": errors,
+                }
+            )
 
         return _build_account_import_failure_response(message, summary=summary, errors=errors)
 
@@ -660,7 +729,13 @@ def _detect_line_type(
     n = len(parts)
 
     def _err(msg: str) -> Dict[str, Any]:
-        return {"type": "error", "provider": "", "fields": {}, "error": msg, "auto_group_name": ""}
+        return {
+            "type": "error",
+            "provider": "",
+            "fields": {},
+            "error": msg,
+            "auto_group_name": "",
+        }
 
     # n >= 5 且 parts[2] == "custom" → 自定义 IMAP
     if n >= 5 and (parts[2] or "").strip().lower() == "custom":
@@ -680,7 +755,12 @@ def _detect_line_type(
         return {
             "type": "imap",
             "provider": "custom",
-            "fields": {"email": email, "imap_password": imap_pwd, "imap_host": host, "imap_port": port},
+            "fields": {
+                "email": email,
+                "imap_password": imap_pwd,
+                "imap_host": host,
+                "imap_port": port,
+            },
             "error": None,
             "auto_group_name": PROVIDER_GROUP_NAME.get("custom", "自定义IMAP"),
         }
@@ -703,7 +783,12 @@ def _detect_line_type(
             return {
                 "type": "imap",
                 "provider": "custom",
-                "fields": {"email": email, "imap_password": imap_pwd, "imap_host": host, "imap_port": port},
+                "fields": {
+                    "email": email,
+                    "imap_password": imap_pwd,
+                    "imap_host": host,
+                    "imap_port": port,
+                },
                 "error": None,
                 "auto_group_name": PROVIDER_GROUP_NAME.get("custom", "自定义IMAP"),
             }
@@ -719,7 +804,12 @@ def _detect_line_type(
         return {
             "type": "outlook",
             "provider": "outlook",
-            "fields": {"email": email, "password": password, "client_id": client_id, "refresh_token": refresh_token},
+            "fields": {
+                "email": email,
+                "password": password,
+                "client_id": client_id,
+                "refresh_token": refresh_token,
+            },
             "error": None,
             "auto_group_name": PROVIDER_GROUP_NAME.get("outlook", "Outlook"),
         }
@@ -743,7 +833,12 @@ def _detect_line_type(
         return {
             "type": "imap",
             "provider": prov,
-            "fields": {"email": email, "imap_password": imap_pwd, "imap_host": host, "imap_port": port},
+            "fields": {
+                "email": email,
+                "imap_password": imap_pwd,
+                "imap_host": host,
+                "imap_port": port,
+            },
             "error": None,
             "auto_group_name": PROVIDER_GROUP_NAME.get(prov, prov),
         }
@@ -766,7 +861,12 @@ def _detect_line_type(
             return {
                 "type": "imap",
                 "provider": prov,
-                "fields": {"email": email, "imap_password": imap_pwd, "imap_host": host, "imap_port": port},
+                "fields": {
+                    "email": email,
+                    "imap_password": imap_pwd,
+                    "imap_host": host,
+                    "imap_port": port,
+                },
                 "error": None,
                 "auto_group_name": PROVIDER_GROUP_NAME.get(prov, prov),
             }
@@ -775,13 +875,18 @@ def _detect_line_type(
             return {
                 "type": "imap",
                 "provider": "custom",
-                "fields": {"email": email, "imap_password": imap_pwd, "imap_host": fallback_host, "imap_port": fallback_port},
+                "fields": {
+                    "email": email,
+                    "imap_password": imap_pwd,
+                    "imap_host": fallback_host,
+                    "imap_port": fallback_port,
+                },
                 "error": None,
                 "auto_group_name": PROVIDER_GROUP_NAME.get("custom", "自定义IMAP"),
             }
         return _err("未知域名且未提供兜底 IMAP 服务器地址")
 
-    # n == 1 → GPTMail
+    # n == 1 → 临时邮箱
     if n == 1:
         email = parts[0].strip()
         if not email or "@" not in email:
@@ -789,11 +894,11 @@ def _detect_line_type(
         if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
             return _err("邮箱格式不正确")
         return {
-            "type": "gptmail",
-            "provider": "gptmail",
+            "type": "temp_mail",
+            "provider": "temp_mail",
             "fields": {"email": email},
             "error": None,
-            "auto_group_name": PROVIDER_GROUP_NAME.get("gptmail", "临时邮箱"),
+            "auto_group_name": PROVIDER_GROUP_NAME.get("temp_mail", "临时邮箱"),
         }
 
     return _err("无法解析的行")
@@ -857,20 +962,28 @@ def _overwrite_account(existing: Dict, detect_result: Dict, group_id: int) -> bo
     return accounts_repo.update_account_credentials(existing["id"], **fields)
 
 
-def _handle_gptmail_import(
+def _handle_temp_mail_import(
     email: str,
     errors: List[Dict[str, Any]],
     line_num: int,
-    gptmail_count: int,
-    max_gptmail: int = 20,
+    temp_mail_count: int,
+    max_temp_mail: int = 20,
 ) -> bool:
-    """处理 GPTMail 临时邮箱的导入，写入 temp_emails 表。"""
+    """处理临时邮箱的导入，写入 temp_emails 表。"""
     from outlook_web.repositories import temp_emails as temp_emails_repo
-    from outlook_web.services import gptmail
+    from outlook_web.services.temp_mail_service import (
+        TEMP_MAIL_SOURCE,
+        get_temp_mail_service,
+    )
 
-    if gptmail_count >= max_gptmail:
+    if temp_mail_count >= max_temp_mail:
         errors.append(
-            {"line": line_num, "email": email, "error": f"GPTMail 单次导入上限 {max_gptmail} 个", "detected_type": "gptmail"}
+            {
+                "line": line_num,
+                "email": email,
+                "error": f"临时邮箱单次导入上限 {max_temp_mail} 个",
+                "detected_type": "temp_mail",
+            }
         )
         return False
 
@@ -879,29 +992,34 @@ def _handle_gptmail_import(
     if existing:
         return True  # 已存在视为跳过（成功）
 
-    # 尝试可用性检查
+    # BUG-02: 严格导入（不做本地兜底写入）
+    temp_mail_service = get_temp_mail_service()
     try:
-        result = gptmail.get_temp_emails_from_api(email)
-        if result and result.get("success"):
-            ok = temp_emails_repo.add_temp_email(email)
-            return ok
-    except Exception:
-        pass
+        mailbox = temp_mail_service.import_user_mailbox(email, allow_local_fallback=False)
+    except Exception as exc:
+        errors.append(
+            {
+                "line": line_num,
+                "email": email,
+                "error": f"临时邮箱导入失败：{str(exc) or '上游探测失败'}",
+                "detected_type": "temp_mail",
+            }
+        )
+        return False
 
-    # API 不可用时尝试重新注册
-    try:
-        if "@" in email:
-            prefix, domain = email.rsplit("@", 1)
-            result = gptmail.generate_temp_email(prefix, domain)
-            if result and result.get("success"):
-                ok = temp_emails_repo.add_temp_email(email)
-                return ok
-    except Exception:
-        pass
-
-    # 直接添加（即使 API 不可用也保存地址）
-    ok = temp_emails_repo.add_temp_email(email)
-    return ok
+    actual_email = str((mailbox or {}).get("email") or "").strip() or email
+    # 导入成功后应已落库；这里做一次确认
+    if temp_emails_repo.get_temp_email_by_address(actual_email):
+        return True
+    errors.append(
+        {
+            "line": line_num,
+            "email": email,
+            "error": "临时邮箱导入失败：导入未落库",
+            "detected_type": "temp_mail",
+        }
+    )
+    return False
 
 
 def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> Any:
@@ -929,7 +1047,10 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
             target_group = groups_repo.get_group_by_id(explicit_group_id)
             if not target_group:
                 return build_error_response(
-                    "GROUP_NOT_FOUND", "指定的分组不存在", message_en="Target group not found", status=404
+                    "GROUP_NOT_FOUND",
+                    "指定的分组不存在",
+                    message_en="Target group not found",
+                    status=404,
                 )
             if target_group.get("is_system"):
                 return build_error_response(
@@ -940,6 +1061,20 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
                 )
 
     raw_lines = account_str.splitlines()
+
+    # 合并续行：从其他地方复制的凭据中 refresh_token 可能包含换行符（行宽折行），
+    # splitlines() 会将其切碎；续行特征：不含 '----' 分隔符且不是注释行
+    _merged: list[str] = []
+    for _line in raw_lines:
+        _stripped = _line.strip()
+        if not _stripped:
+            continue
+        if _merged and not _merged[-1].lstrip().startswith("#") and "----" not in _stripped and not _stripped.startswith("#"):
+            _merged[-1] += _stripped
+        else:
+            _merged.append(_stripped)
+    raw_lines = _merged
+
     imported = 0
     skipped = 0
     failed = 0
@@ -949,7 +1084,7 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
     errors_total = 0
     max_error_details = 50
     group_cache: Dict[str, int] = {}
-    gptmail_count = 0
+    temp_mail_count = 0
 
     for line_num, raw in enumerate(raw_lines, 1):
         line = (raw or "").strip()
@@ -974,15 +1109,22 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
             failed += 1
             errors_total += 1
             if len(errors) < max_error_details:
-                errors.append({"line": line_num, "email": email, "error": "邮箱格式不正确", "detected_type": result["type"]})
+                errors.append(
+                    {
+                        "line": line_num,
+                        "email": email,
+                        "error": "邮箱格式不正确",
+                        "detected_type": result["type"],
+                    }
+                )
             continue
 
         # 初始化 provider 统计
         if prov not in by_provider:
             by_provider[prov] = {"imported": 0, "skipped": 0, "failed": 0}
 
-        # GPTMail 特殊处理：写入 temp_emails
-        if result["type"] == "gptmail":
+        # 临时邮箱特殊处理：写入 temp_emails
+        if result["type"] == "temp_mail":
             from outlook_web.repositories import temp_emails as temp_emails_repo
 
             existing_temp = temp_emails_repo.get_temp_email_by_address(email)
@@ -991,15 +1133,15 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
                     skipped += 1
                     by_provider[prov]["skipped"] += 1
                     continue
-                # overwrite 对 GPTMail 无意义（无凭据可更新），视为跳过
+                # overwrite 对临时邮箱无意义（无凭据可更新），视为跳过
                 skipped += 1
                 by_provider[prov]["skipped"] += 1
                 continue
 
-            ok = _handle_gptmail_import(email, errors, line_num, gptmail_count)
+            ok = _handle_temp_mail_import(email, errors, line_num, temp_mail_count)
             if ok:
                 imported += 1
-                gptmail_count += 1
+                temp_mail_count += 1
                 by_provider[prov]["imported"] += 1
             else:
                 failed += 1
@@ -1037,7 +1179,12 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
                     by_provider[prov]["failed"] += 1
                     if len(errors) < max_error_details:
                         errors.append(
-                            {"line": line_num, "email": email, "error": "覆盖更新失败", "detected_type": result["type"]}
+                            {
+                                "line": line_num,
+                                "email": email,
+                                "error": "覆盖更新失败",
+                                "detected_type": result["type"],
+                            }
                         )
                 continue
 
@@ -1085,7 +1232,14 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
             except Exception:
                 pass
             if len(errors) < max_error_details:
-                errors.append({"line": line_num, "email": email, "error": reason, "detected_type": result["type"]})
+                errors.append(
+                    {
+                        "line": line_num,
+                        "email": email,
+                        "error": reason,
+                        "detected_type": result["type"],
+                    }
+                )
 
     summary = {
         "mode": "auto",
@@ -1117,7 +1271,18 @@ def _handle_auto_import(data: Dict[str, Any], *, add_to_pool: bool = False) -> A
 
 @login_required
 def api_update_account(account_id: int) -> Any:
-    """更新账号"""
+    """更新账号（邮箱池管理的 CF 临时邮箱不允许手动编辑）"""
+    # 邮箱池管理的 CF 临时邮箱不允许手动编辑
+    db = get_db()
+    cf_row = db.execute("SELECT provider FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if cf_row and (cf_row["provider"] or "").lower() == "cloudflare_temp_mail":
+        return build_error_response(
+            "POOL_ACCOUNT_UPDATE_DENIED",
+            "邮箱池管理的 CF 临时邮箱不允许手动编辑",
+            message_en="CF temp mail accounts managed by pool cannot be edited manually.",
+            status=403,
+        )
+
     data = request.json
 
     # 检查是否只更新状态
@@ -1137,7 +1302,11 @@ def api_update_account(account_id: int) -> Any:
     status = data.get("status", "active")
 
     if not email_addr:
-        return build_error_response("ACCOUNT_EMAIL_REQUIRED", "邮箱不能为空", message_en="Email address is required")
+        return build_error_response(
+            "ACCOUNT_EMAIL_REQUIRED",
+            "邮箱不能为空",
+            message_en="Email address is required",
+        )
 
     target_group = groups_repo.get_group_by_id(group_id)
     if not target_group:
@@ -1162,7 +1331,12 @@ def api_update_account(account_id: int) -> Any:
 
     existing_account = accounts_repo.get_account_by_id(account_id)
     if not existing_account:
-        return build_error_response("ACCOUNT_NOT_FOUND", "账号不存在", message_en="Account not found", status=404)
+        return build_error_response(
+            "ACCOUNT_NOT_FOUND",
+            "账号不存在",
+            message_en="Account not found",
+            status=404,
+        )
 
     account_type = (existing_account.get("account_type") or "outlook").strip().lower()
     if account_type != "imap":
@@ -1206,8 +1380,19 @@ def api_update_account(account_id: int) -> Any:
             ensure_ascii=False,
         )
         log_audit("update", "account", str(account_id), details)
-        return jsonify({"success": True, "message": "账号更新成功", "message_en": "Account updated successfully"})
-    return build_error_response("ACCOUNT_UPDATE_FAILED", "更新失败", message_en="Failed to update account", status=500)
+        return jsonify(
+            {
+                "success": True,
+                "message": "账号更新成功",
+                "message_en": "Account updated successfully",
+            }
+        )
+    return build_error_response(
+        "ACCOUNT_UPDATE_FAILED",
+        "更新失败",
+        message_en="Failed to update account",
+        status=500,
+    )
 
 
 @login_required
@@ -1218,7 +1403,12 @@ def api_update_account_remark(account_id: int) -> Any:
 
     existing_account = accounts_repo.get_account_by_id(account_id)
     if not existing_account:
-        return build_error_response("ACCOUNT_NOT_FOUND", "账号不存在", message_en="Account not found", status=404)
+        return build_error_response(
+            "ACCOUNT_NOT_FOUND",
+            "账号不存在",
+            message_en="Account not found",
+            status=404,
+        )
 
     email_addr = (existing_account.get("email") or "").strip()
     password = None
@@ -1250,7 +1440,13 @@ def api_update_account_remark(account_id: int) -> Any:
         str(account_id),
         json.dumps({"remark": remark}, ensure_ascii=False),
     )
-    return jsonify({"success": True, "message": "备注更新成功", "message_en": "Remark updated successfully"})
+    return jsonify(
+        {
+            "success": True,
+            "message": "备注更新成功",
+            "message_en": "Remark updated successfully",
+        }
+    )
 
 
 def _api_update_account_status(account_id: int, status: str) -> Any:
@@ -1285,18 +1481,30 @@ def _api_update_account_status(account_id: int, status: str) -> Any:
         return jsonify({"success": True, "message": "状态更新成功"})
     except Exception:
         return build_error_response(
-            "ACCOUNT_STATUS_UPDATE_FAILED", "更新失败", message_en="Failed to update account status", status=500
+            "ACCOUNT_STATUS_UPDATE_FAILED",
+            "更新失败",
+            message_en="Failed to update account status",
+            status=500,
         )
 
 
 @login_required
 def api_delete_account(account_id: int) -> Any:
-    """删除账号"""
+    """删除账号（邮箱池管理的 CF 临时邮箱不允许手动删除）"""
     email_addr = ""
     try:
         db = get_db()
-        row = db.execute("SELECT email FROM accounts WHERE id = ?", (account_id,)).fetchone()
-        email_addr = row["email"] if row else ""
+        row = db.execute("SELECT email, provider FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        if row:
+            email_addr = row["email"]
+            # 邮箱池管理的 CF 临时邮箱不允许手动删除
+            if (row["provider"] or "").lower() == "cloudflare_temp_mail":
+                return build_error_response(
+                    "POOL_ACCOUNT_DELETE_DENIED",
+                    "邮箱池管理的 CF 临时邮箱不允许手动删除，请通过邮箱池接口释放",
+                    message_en="CF temp mail accounts managed by pool cannot be deleted manually. Use pool release API instead.",
+                    status=403,
+                )
     except Exception:
         email_addr = ""
     if accounts_repo.delete_account_by_id(account_id):
@@ -1307,16 +1515,35 @@ def api_delete_account(account_id: int) -> Any:
             f"删除账号：{email_addr}" if email_addr else "删除账号",
         )
         return jsonify({"success": True})
-    return build_error_response("ACCOUNT_DELETE_FAILED", "删除失败", message_en="Failed to delete account", status=500)
+    return build_error_response(
+        "ACCOUNT_DELETE_FAILED",
+        "删除失败",
+        message_en="Failed to delete account",
+        status=500,
+    )
 
 
 @login_required
 def api_delete_account_by_email(email_addr: str) -> Any:
-    """根据邮箱地址删除账号"""
+    """根据邮箱地址删除账号（邮箱池管理的 CF 临时邮箱不允许手动删除）"""
+    db = get_db()
+    row = db.execute("SELECT provider FROM accounts WHERE email = ?", (email_addr,)).fetchone()
+    if row and (row["provider"] or "").lower() == "cloudflare_temp_mail":
+        return build_error_response(
+            "POOL_ACCOUNT_DELETE_DENIED",
+            "邮箱池管理的 CF 临时邮箱不允许手动删除，请通过邮箱池接口释放",
+            message_en="CF temp mail accounts managed by pool cannot be deleted manually. Use pool release API instead.",
+            status=403,
+        )
     if accounts_repo.delete_account_by_email(email_addr):
         log_audit("delete", "account", email_addr, f"删除账号：{email_addr}")
         return jsonify({"success": True})
-    return build_error_response("ACCOUNT_DELETE_FAILED", "删除失败", message_en="Failed to delete account", status=500)
+    return build_error_response(
+        "ACCOUNT_DELETE_FAILED",
+        "删除失败",
+        message_en="Failed to delete account",
+        status=500,
+    )
 
 
 @login_required
@@ -1344,10 +1571,15 @@ def api_batch_delete_accounts() -> Any:
 
     for account_id in account_ids:
         try:
-            # 获取邮箱地址用于审计日志
+            # 获取邮箱地址和 provider 用于审计日志和保护判断
             db = get_db()
-            row = db.execute("SELECT email FROM accounts WHERE id = ?", (account_id,)).fetchone()
+            row = db.execute("SELECT email, provider FROM accounts WHERE id = ?", (account_id,)).fetchone()
             email_addr = row["email"] if row else ""
+
+            # 邮箱池管理的 CF 临时邮箱不允许手动删除，跳过
+            if row and (row["provider"] or "").lower() == "cloudflare_temp_mail":
+                failed_count += 1
+                continue
 
             if accounts_repo.delete_account_by_id(account_id):
                 log_audit(
@@ -1420,16 +1652,27 @@ def api_batch_update_account_group() -> Any:
 
     if not account_ids:
         return build_error_response(
-            "ACCOUNT_IDS_REQUIRED", "请选择要修改的账号", message_en="Please select the accounts to update"
+            "ACCOUNT_IDS_REQUIRED",
+            "请选择要修改的账号",
+            message_en="Please select the accounts to update",
         )
 
     if not group_id:
-        return build_error_response("GROUP_ID_REQUIRED", "请选择目标分组", message_en="Please select a target group")
+        return build_error_response(
+            "GROUP_ID_REQUIRED",
+            "请选择目标分组",
+            message_en="Please select a target group",
+        )
 
     # 验证分组存在
     group = groups_repo.get_group_by_id(group_id)
     if not group:
-        return build_error_response("GROUP_NOT_FOUND", "目标分组不存在", message_en="Target group not found", status=404)
+        return build_error_response(
+            "GROUP_NOT_FOUND",
+            "目标分组不存在",
+            message_en="Target group not found",
+            status=404,
+        )
 
     # 检查是否是临时邮箱分组（系统保留分组）
     if group.get("is_system"):
@@ -1461,7 +1704,7 @@ def api_batch_update_account_group() -> Any:
         return jsonify(
             {
                 "success": True,
-                "message": f'已将 {len(account_ids)} 个账号移动到「{group["name"]}」分组',
+                "message": f"已将 {len(account_ids)} 个账号移动到「{group['name']}」分组",
             }
         )
     except Exception as e:
@@ -1601,46 +1844,46 @@ def api_search_accounts() -> Any:
 
 
 def _build_export_text(accounts: List[Dict[str, Any]], temp_emails: Optional[List[Dict]] = None) -> str:
-    """构建导出文本 v2：头部元信息 + 分段 + GPTMail 分段。"""
+    """构建导出文本 v2：头部元信息 + 分段 + 临时邮箱分段。"""
     import io
 
     from outlook_web.services.providers import MAIL_PROVIDERS, get_provider_list
 
     outlook_lines: List[str] = []
     imap_groups: Dict[str, List[str]] = {}
-    gptmail_lines: List[str] = []
+    temp_mail_lines: List[str] = []
 
     for acc in accounts or []:
         atype = (acc.get("account_type") or "outlook").strip().lower()
         prov = (acc.get("provider") or "").strip().lower()
 
-        # GPTMail 账号（如果存在于 accounts 表中）
-        if prov == "gptmail":
-            gptmail_lines.append(acc.get("email", ""))
+        # 兼容历史 provider，统一按临时邮箱导出
+        if prov in {"gptmail", "temp_mail"}:
+            temp_mail_lines.append(acc.get("email", ""))
             continue
 
         if atype == "outlook":
-            line = f"{acc.get('email','')}----{acc.get('password','')}----{acc.get('client_id','')}----{acc.get('refresh_token','')}"
+            line = f"{acc.get('email', '')}----{acc.get('password', '')}----{acc.get('client_id', '')}----{acc.get('refresh_token', '')}"
             outlook_lines.append(line)
             continue
 
         provider = prov or "custom"
         imap_pwd = acc.get("imap_password", "") or ""
         if provider == "custom":
-            line = f"{acc.get('email','')}----{imap_pwd}----{provider}----{acc.get('imap_host','') or ''}----{acc.get('imap_port', 993) or 993}"
+            line = f"{acc.get('email', '')}----{imap_pwd}----{provider}----{acc.get('imap_host', '') or ''}----{acc.get('imap_port', 993) or 993}"
         else:
-            line = f"{acc.get('email','')}----{imap_pwd}----{provider}"
+            line = f"{acc.get('email', '')}----{imap_pwd}----{provider}"
 
         imap_groups.setdefault(provider, []).append(line)
 
-    # 追加 temp_emails 中的 GPTMail
+    # 追加 temp_emails 中的临时邮箱
     for te in temp_emails or []:
         email = te.get("email", "")
-        if email and email not in gptmail_lines:
-            gptmail_lines.append(email)
+        if email and email not in temp_mail_lines:
+            temp_mail_lines.append(email)
 
     # 统计
-    total = len(outlook_lines) + sum(len(v) for v in imap_groups.values()) + len(gptmail_lines)
+    total = len(outlook_lines) + sum(len(v) for v in imap_groups.values()) + len(temp_mail_lines)
     buf = io.StringIO()
 
     # 头部元信息
@@ -1653,8 +1896,8 @@ def _build_export_text(accounts: List[Dict[str, Any]], temp_emails: Optional[Lis
     for prov_key, lines in imap_groups.items():
         label = (MAIL_PROVIDERS.get(prov_key, {}) or {}).get("label", prov_key)
         buf.write(f"#   {label}：{len(lines)}\n")
-    if gptmail_lines:
-        buf.write(f"#   临时邮箱：{len(gptmail_lines)}\n")
+    if temp_mail_lines:
+        buf.write(f"#   临时邮箱：{len(temp_mail_lines)}\n")
     buf.write("# 格式版本：v2\n")
     buf.write("# ============================================\n")
 
@@ -1686,10 +1929,10 @@ def _build_export_text(accounts: List[Dict[str, Any]], temp_emails: Optional[Lis
         for line in lines:
             buf.write(line + "\n")
 
-    # GPTMail 分段
-    if gptmail_lines:
-        buf.write("\n# === 临时邮箱（GPTMail）===\n")
-        for line in gptmail_lines:
+    # 临时邮箱分段
+    if temp_mail_lines:
+        buf.write("\n# === 临时邮箱（自建）===\n")
+        for line in temp_mail_lines:
             buf.write(line + "\n")
 
     return buf.getvalue()
@@ -1716,18 +1959,26 @@ def api_export_all_accounts() -> Any:
     # 使用 load_accounts 获取所有账号（自动解密）
     accounts = accounts_repo.load_accounts()
 
-    # 加载 GPTMail 临时邮箱
+    # 加载临时邮箱
     from outlook_web.repositories import temp_emails as temp_emails_repo
 
     temp_emails = temp_emails_repo.load_temp_emails()
 
     if not accounts and not temp_emails:
         return build_error_response(
-            "ACCOUNT_EXPORT_EMPTY", "没有邮箱账号", message_en="No mail accounts are available for export", status=404
+            "ACCOUNT_EXPORT_EMPTY",
+            "没有邮箱账号",
+            message_en="No mail accounts are available for export",
+            status=404,
         )
 
     # 记录审计日志
-    log_audit("export", "all_accounts", None, f"导出所有账号，共 {len(accounts)} 个账号 + {len(temp_emails)} 个临时邮箱")
+    log_audit(
+        "export",
+        "all_accounts",
+        None,
+        f"导出所有账号，共 {len(accounts)} 个账号 + {len(temp_emails)} 个临时邮箱",
+    )
 
     content = _build_export_text(accounts, temp_emails)
 
@@ -1764,7 +2015,9 @@ def api_export_selected_accounts() -> Any:
 
     if not group_ids:
         return build_error_response(
-            "GROUP_IDS_REQUIRED", "请选择要导出的分组", message_en="Please select at least one group to export"
+            "GROUP_IDS_REQUIRED",
+            "请选择要导出的分组",
+            message_en="Please select at least one group to export",
         )
 
     # 获取选中分组下的所有账号（使用 load_accounts 自动解密）
@@ -1773,7 +2026,7 @@ def api_export_selected_accounts() -> Any:
         accounts = accounts_repo.load_accounts(group_id)
         all_accounts.extend(accounts)
 
-    # 仅当选中了"临时邮箱"系统分组时才附加 GPTMail
+    # 仅当选中了"临时邮箱"系统分组时才附加临时邮箱
     from outlook_web.repositories import temp_emails as temp_emails_repo
 
     temp_emails: List[Dict] = []
@@ -1828,7 +2081,12 @@ def api_generate_export_verify_token() -> Any:
     # 验证密码
     stored_password = settings_repo.get_login_password()
     if not verify_password(password, stored_password):
-        return build_error_response("LOGIN_INVALID_PASSWORD", "密码错误", message_en="Invalid password", status=401)
+        return build_error_response(
+            "LOGIN_INVALID_PASSWORD",
+            "密码错误",
+            message_en="Invalid password",
+            status=401,
+        )
 
     # 生成一次性 token
     client_ip = get_client_ip()
@@ -2199,3 +2457,56 @@ def api_telegram_toggle(account_id: int) -> Any:
             "message_en": f"Mailbox notifications {'enabled' if enabled else 'disabled'}",
         }
     )
+
+
+# ==================== 指定账号批量刷新 Token ====================
+
+
+@login_required
+def api_refresh_selected_accounts() -> Any:
+    """刷新指定账号列表的 token（SSE 流式响应）"""
+    data = request.get_json(silent=True) or {}
+    account_ids = data.get("account_ids", [])
+
+    if not account_ids or not isinstance(account_ids, list):
+        error_payload = build_error_payload(
+            "INVALID_PARAMS",
+            "account_ids 不能为空",
+            "ValidationError",
+            400,
+            "account_ids must be a non-empty list of integers",
+        )
+        return jsonify({"success": False, "error": error_payload}), 400
+
+    # 确保所有 ID 为整数
+    try:
+        account_ids = [int(aid) for aid in account_ids]
+    except (TypeError, ValueError):
+        error_payload = build_error_payload(
+            "INVALID_PARAMS",
+            "account_ids 必须为整数列表",
+            "ValidationError",
+            400,
+            "account_ids must be a list of integers",
+        )
+        return jsonify({"success": False, "error": error_payload}), 400
+
+    trace_id_value = None
+    try:
+        trace_id_value = getattr(g, "trace_id", None)
+    except Exception:
+        trace_id_value = None
+    requested_by_ip = get_client_ip()
+    requested_by_user_agent = get_user_agent()
+
+    def generate():
+        yield from refresh_service.stream_refresh_selected_accounts(
+            account_ids=account_ids,
+            trace_id=trace_id_value,
+            requested_by_ip=requested_by_ip,
+            requested_by_user_agent=requested_by_user_agent,
+            lock_name=REFRESH_LOCK_NAME,
+            test_refresh_token=graph_service.test_refresh_token_with_rotation,
+        )
+
+    return Response(generate(), mimetype="text/event-stream")

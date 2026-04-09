@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+import logging
 import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 RESULT_TO_POOL_STATUS: Dict[str, str] = {
     "success": "used",
@@ -14,8 +18,156 @@ RESULT_TO_POOL_STATUS: Dict[str, str] = {
 }
 
 
+class PoolRepositoryError(Exception):
+    """Repository 层业务错误，包含错误码。"""
+
+    def __init__(self, message: str, error_code: str):
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _parse_claimed_by(claimed_by: Optional[str]) -> tuple[str, str]:
+    """从 claimed_by 字段解析 caller_id 和 task_id（兼容旧格式）。"""
+    if not claimed_by:
+        return "", ""
+    parts = (claimed_by or ":").split(":", 1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
+
+
+def insert_claimed_account(
+    conn: sqlite3.Connection,
+    *,
+    email: str,
+    caller_id: str,
+    task_id: str,
+    lease_seconds: int,
+    provider: str,
+    account_type: str = "temp_mail",
+    project_key: Optional[str] = None,
+    temp_mail_meta: Optional[dict] = None,
+    claim_log_detail: str = "动态创建",
+) -> dict:
+    """插入一个新账号并直接标记为 claimed（供 Service 层动态创建邮箱后写入池）。
+
+    - Repository 层不允许依赖 services，因此这里仅做 DB 写入，不做任何上游网络调用。
+    - 该函数内部包含 BEGIN IMMEDIATE / COMMIT。
+    - temp_mail_meta: CF 邮箱的远程元数据（JSON dict），用于后续删除远程邮箱时提供凭据。
+    """
+
+    normalized_email = str(email or "").strip()
+    if not normalized_email:
+        raise PoolRepositoryError("email 不能为空", "invalid_email")
+
+    # 提取 email_domain
+    extracted_domain = ""
+    if "@" in normalized_email:
+        extracted_domain = normalized_email.split("@", 1)[1].strip().lower()
+
+    # 生成 claim_token
+    now_str = _utcnow().isoformat() + "Z"
+    lease_expires_at_str = (_utcnow() + timedelta(seconds=lease_seconds)).isoformat() + "Z"
+    token = "clm_" + secrets.token_urlsafe(9)
+
+    # 序列化 meta（明文 JSON）
+    meta_obj = temp_mail_meta or {}
+    if isinstance(meta_obj, str):
+        temp_mail_meta_json = meta_obj
+    else:
+        temp_mail_meta_json = json.dumps(meta_obj, ensure_ascii=False) if meta_obj else "{}"
+
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+
+        cursor = conn.execute(
+            """
+            INSERT INTO accounts (
+                email, password, client_id, refresh_token,
+                account_type, provider, status,
+                pool_status, claimed_by, claimed_at, lease_expires_at, claim_token,
+                last_claimed_at, temp_mail_meta, email_domain,
+                created_at, updated_at
+            ) VALUES (?, '', '', '',
+                      ?, ?, 'active',
+                      'claimed', ?, ?, ?, ?,
+                      ?, ?, ?,
+                      ?, ?)
+            """,
+            (
+                normalized_email,
+                account_type,
+                provider,
+                f"{caller_id}:{task_id}",
+                now_str,
+                lease_expires_at_str,
+                token,
+                now_str,
+                temp_mail_meta_json,
+                extracted_domain,
+                now_str,
+                now_str,
+            ),
+        )
+        account_id = cursor.lastrowid
+
+        conn.execute(
+            """
+            INSERT INTO account_claim_logs
+                (account_id, claim_token, caller_id, task_id, action, result, detail, created_at)
+            VALUES (?, ?, ?, ?, 'claim', NULL, ?, ?)
+            """,
+            (account_id, token, caller_id, task_id, claim_log_detail, now_str),
+        )
+
+        # project_key 存在时写入 project usage
+        if project_key and caller_id:
+            conn.execute(
+                """
+                INSERT INTO account_project_usage
+                    (account_id, consumer_key, project_key, first_claimed_at, last_claimed_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(account_id, consumer_key, project_key)
+                DO UPDATE SET last_claimed_at = excluded.last_claimed_at
+                """,
+                (account_id, caller_id, project_key, now_str, now_str),
+            )
+
+        conn.execute("COMMIT")
+
+        logger.info(
+            "[pool] 动态插入账号并 claim: %s (provider=%s, account_id=%s)",
+            normalized_email,
+            provider,
+            account_id,
+        )
+
+        return {
+            "id": account_id,
+            "email": normalized_email,
+            "provider": provider,
+            "account_type": account_type,
+            "pool_status": "claimed",
+            "claim_token": token,
+            "claimed_at": now_str,
+            "lease_expires_at": lease_expires_at_str,
+            "temp_mail_meta": temp_mail_meta_json,
+            "email_domain": extracted_domain,
+        }
+    except sqlite3.IntegrityError as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise PoolRepositoryError(f"插入账号失败: {e}", "db_integrity_error") from e
+    except Exception as e:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise PoolRepositoryError(f"插入账号失败: {e}", "db_error") from e
 
 
 def claim_atomic(
@@ -27,6 +179,8 @@ def claim_atomic(
     group_id: Optional[int] = None,
     tags: Optional[List[str]] = None,
     exclude_recent_minutes: Optional[int] = None,
+    project_key: Optional[str] = None,
+    email_domain: Optional[str] = None,
 ) -> Optional[dict]:
     sql = """
         SELECT a.* FROM accounts a
@@ -58,6 +212,24 @@ def claim_atomic(
         cutoff = (_utcnow() - timedelta(minutes=exclude_recent_minutes)).isoformat() + "Z"
         sql += " AND (a.last_claimed_at IS NULL OR a.last_claimed_at < ?)"
         params.append(cutoff)
+
+    # PR#27: email_domain 过滤
+    if email_domain:
+        sql += " AND a.email_domain = ? COLLATE NOCASE"
+        params.append(email_domain.strip().lower())
+
+    # PR#27: project_key 防止同项目复用已用账号
+    if project_key and caller_id:
+        sql += """
+            AND NOT EXISTS (
+                SELECT 1 FROM account_project_usage apu
+                WHERE apu.account_id = a.id
+                  AND apu.consumer_key = ?
+                  AND apu.project_key = ?
+            )
+        """
+        params.append(caller_id)
+        params.append(project_key)
 
     sql += " ORDER BY RANDOM() LIMIT 1"
 
@@ -102,11 +274,78 @@ def claim_atomic(
         """,
         (account["id"], token, caller_id, task_id, now_str),
     )
+
+    # PR#27: 记录 project 维度使用（project_key 存在时）
+    if project_key and caller_id:
+        conn.execute(
+            """
+            INSERT INTO account_project_usage
+                (account_id, consumer_key, project_key, first_claimed_at, last_claimed_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(account_id, consumer_key, project_key)
+            DO UPDATE SET last_claimed_at = excluded.last_claimed_at
+            """,
+            (account["id"], caller_id, project_key, now_str, now_str),
+        )
+
     conn.execute("COMMIT")
     return dict(account) | {
         "claim_token": token,
         "lease_expires_at": lease_expires_at_str,
+        "claimed_at": now_str,
     }
+
+
+def get_claim_context(
+    conn: sqlite3.Connection,
+    claim_token: str,
+) -> Optional[dict]:
+    """
+    根据 claim_token 查询 claimed_at 时间戳（用作邮件读取的 baseline）。
+    返回包含 account_id / email / claimed_at / email_domain 的 dict，或 None。
+    """
+    row = conn.execute(
+        """
+        SELECT id, email, claimed_at, email_domain, pool_status
+        FROM accounts
+        WHERE claim_token = ?
+        """,
+        (claim_token,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "account_id": row["id"],
+        "email": row["email"],
+        "claimed_at": row["claimed_at"] or "",
+        "email_domain": row["email_domain"] or "",
+        "pool_status": row["pool_status"] or "",
+    }
+
+
+def append_claim_read_context(
+    conn: sqlite3.Connection,
+    account_id: int,
+    claim_token: str,
+    caller_id: str,
+    task_id: str,
+    detail: Optional[str] = None,
+) -> None:
+    """
+    追加一条 'read' 动作的 claim log（用于记录邮件读取行为）。
+    使用 BEGIN IMMEDIATE 事务，与 pool.py 其他写操作保持一致。
+    """
+    now_str = _utcnow().isoformat() + "Z"
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute(
+        """
+        INSERT INTO account_claim_logs
+            (account_id, claim_token, caller_id, task_id, action, result, detail, created_at)
+        VALUES (?, ?, ?, ?, 'read', NULL, ?, ?)
+        """,
+        (account_id, claim_token, caller_id, task_id, detail, now_str),
+    )
+    conn.execute("COMMIT")
 
 
 def release(
@@ -131,6 +370,16 @@ def release(
         WHERE id = ?
         """,
         (now_str, account_id),
+    )
+    # Bug #28 fix: release 意味着本次领取被放弃（未成功注册），
+    # 需要同步清理 account_project_usage 里该账号由此 caller 产生的记录，
+    # 否则下次使用相同 project_key 的 claim-random 会被 NOT EXISTS 子查询错误排除。
+    conn.execute(
+        """
+        DELETE FROM account_project_usage
+        WHERE account_id = ? AND consumer_key = ?
+        """,
+        (account_id, caller_id),
     )
     conn.execute(
         """
@@ -205,9 +454,7 @@ def expire_stale_claims(conn: sqlite3.Connection) -> int:
     ).fetchall()
 
     for account in expired:
-        parts = (account["claimed_by"] or ":").split(":", 1)
-        caller_id = parts[0]
-        task_id = parts[1] if len(parts) > 1 else ""
+        caller_id, task_id = _parse_claimed_by(account["claimed_by"])
 
         conn.execute("BEGIN IMMEDIATE")
         conn.execute(

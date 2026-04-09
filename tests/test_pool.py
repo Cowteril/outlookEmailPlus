@@ -421,7 +421,162 @@ class PoolRepositoryTests(unittest.TestCase):
         finally:
             conn.close()
 
-    def test_multiple_claim_tokens_are_unique(self):
+    def test_release_clears_project_usage_for_reclaim(self):
+        """Bug #28 回归测试：release 后，同一 project_key 应能再次领取该账号。
+
+        背景：v17 引入 account_project_usage 防止同项目复用已用账号，
+        但 release 操作忘记清理该表，导致放弃的账号被 NOT EXISTS 永远排除，
+        使得 release 后下次 claim-random 拿不到任何可用邮箱。
+        """
+        conn = self.create_conn()
+        try:
+            import secrets
+
+            iso_provider = f"proj_bug28_{secrets.token_hex(4)}"
+            email = f"bug28_test_{secrets.token_hex(4)}@example.com"
+            conn.execute(
+                """
+                INSERT INTO accounts (email, client_id, refresh_token, status,
+                                      pool_status, provider, email_domain)
+                VALUES (?, 'cid', 'rt', 'active', 'available', ?, ?)
+                """,
+                (email, iso_provider, email.rsplit("@", 1)[-1].lower()),
+            )
+            conn.commit()
+
+            # 第一次用 project_key 领取
+            r1 = self.pool_repo.claim_atomic(
+                conn,
+                caller_id="bot",
+                task_id="task_bug28_a",
+                lease_seconds=60,
+                provider=iso_provider,
+                project_key="proj_x",
+            )
+            self.assertIsNotNone(r1, "第一次 claim 应成功")
+            claimed_id = r1["id"]
+
+            # 确认 account_project_usage 里已有记录
+            usage_row = conn.execute(
+                "SELECT * FROM account_project_usage WHERE account_id = ? AND project_key = 'proj_x'",
+                (claimed_id,),
+            ).fetchone()
+            self.assertIsNotNone(usage_row, "claim 后应在 account_project_usage 写入记录")
+
+            # 释放该账号
+            self.pool_repo.release(
+                conn,
+                account_id=claimed_id,
+                claim_token=r1["claim_token"],
+                caller_id="bot",
+                task_id="task_bug28_a",
+                reason="任务放弃",
+            )
+
+            # 确认 account_project_usage 里的记录已被清除（Bug #28 fix 核心验证）
+            usage_after = conn.execute(
+                "SELECT * FROM account_project_usage WHERE account_id = ? AND consumer_key = 'bot'",
+                (claimed_id,),
+            ).fetchone()
+            self.assertIsNone(
+                usage_after,
+                "release 后应清除 account_project_usage 里的记录，否则下次 claim 会被 NOT EXISTS 排除",
+            )
+
+            # 确认账号状态恢复为 available
+            row = conn.execute("SELECT pool_status FROM accounts WHERE id = ?", (claimed_id,)).fetchone()
+            self.assertEqual(row["pool_status"], "available")
+
+            # 第二次用相同 project_key 再次领取 —— 应该成功（而不是 None）
+            r2 = self.pool_repo.claim_atomic(
+                conn,
+                caller_id="bot",
+                task_id="task_bug28_b",
+                lease_seconds=60,
+                provider=iso_provider,
+                project_key="proj_x",
+            )
+            self.assertIsNotNone(
+                r2,
+                "Bug #28：release 后用相同 project_key 应能再次领取账号，而不是 NO_AVAILABLE_ACCOUNT",
+            )
+            self.assertEqual(r2["id"], claimed_id, "领取到的应是同一个账号")
+        finally:
+            conn.close()
+
+    def test_release_without_project_key_still_works(self):
+        """没有使用 project_key 的 release 不应受到影响（兼容性验证）。"""
+        conn = self.create_conn()
+        try:
+            account_id = self._make_account(conn)
+            result = self.pool_repo.claim_atomic(conn, caller_id="bot", task_id="task_no_proj", lease_seconds=60)
+            self.assertIsNotNone(result)
+
+            self.pool_repo.release(
+                conn,
+                account_id=result["id"],
+                claim_token=result["claim_token"],
+                caller_id="bot",
+                task_id="task_no_proj",
+                reason="no project key test",
+            )
+
+            row = conn.execute("SELECT pool_status FROM accounts WHERE id = ?", (result["id"],)).fetchone()
+            self.assertEqual(
+                row["pool_status"],
+                "available",
+                "无 project_key 的 release 应正常恢复为 available",
+            )
+        finally:
+            conn.close()
+
+    def test_complete_success_preserves_project_usage(self):
+        """complete(success) 不应清除 account_project_usage，确保已用账号继续被排除。"""
+        conn = self.create_conn()
+        try:
+            import secrets
+
+            iso_provider = f"proj_complete_{secrets.token_hex(4)}"
+            email = f"proj_complete_{secrets.token_hex(4)}@example.com"
+            conn.execute(
+                """
+                INSERT INTO accounts (email, client_id, refresh_token, status,
+                                      pool_status, provider, email_domain)
+                VALUES (?, 'cid', 'rt', 'active', 'available', ?, ?)
+                """,
+                (email, iso_provider, email.rsplit("@", 1)[-1].lower()),
+            )
+            conn.commit()
+
+            r = self.pool_repo.claim_atomic(
+                conn,
+                caller_id="bot",
+                task_id="task_complete_proj",
+                lease_seconds=60,
+                provider=iso_provider,
+                project_key="proj_y",
+            )
+            self.assertIsNotNone(r)
+
+            self.pool_repo.complete(
+                conn,
+                account_id=r["id"],
+                claim_token=r["claim_token"],
+                caller_id="bot",
+                task_id="task_complete_proj",
+                result="success",
+                detail=None,
+            )
+
+            # complete(success) 后 pool_status = 'used'，account_project_usage 保留
+            usage_row = conn.execute(
+                "SELECT * FROM account_project_usage WHERE account_id = ? AND project_key = 'proj_y'",
+                (r["id"],),
+            ).fetchone()
+            self.assertIsNotNone(usage_row, "complete(success) 不应清除 account_project_usage 记录")
+        finally:
+            conn.close()
+
         conn = self.create_conn()
         try:
             tokens = set()
@@ -598,6 +753,25 @@ class PoolServiceTests(unittest.TestCase):
         cls.pool_service = pool_service
         cls.create_conn = staticmethod(lambda: create_sqlite_connection())
 
+    def setUp(self):
+        """清理测试数据库，确保用例之间互不影响。
+
+        注意：tests/_import_app.py 里使用的是同一个临时 DB 文件，
+        如果不做清理，不同测试/不同 TestCase 之间会互相污染，导致
+        像“池中无可用账号”的断言在整套运行时偶发失败。
+        """
+        conn = self.create_conn()
+        try:
+            # accounts 被多张表引用：
+            # - account_claim_logs / account_project_usage 没有 ON DELETE CASCADE
+            #   必须先清理，否则会触发外键约束错误。
+            conn.execute("DELETE FROM account_project_usage")
+            conn.execute("DELETE FROM account_claim_logs")
+            conn.execute("DELETE FROM accounts")
+            conn.commit()
+        finally:
+            conn.close()
+
     def _make_account(self, pool_status="available"):
         import secrets
 
@@ -629,14 +803,26 @@ class PoolServiceTests(unittest.TestCase):
         self.assertEqual(ctx.exception.error_code, "caller_id_empty")
 
     def test_claim_random_no_account_200(self):
+        """池中没有可用账号时，应返回 200 + no_available_account"""
         with self.assertRaises(self.pool_service.PoolServiceError) as ctx:
             self.pool_service.claim_random(
                 caller_id="bot",
                 task_id="t_no_acct",
-                provider="provider_that_does_not_exist_xyz",
+                provider=None,  # 使用 None 表示不限定 provider，避免触发 invalid_provider 校验
             )
         self.assertEqual(ctx.exception.http_status, 200)
         self.assertEqual(ctx.exception.error_code, "no_available_account")
+
+    def test_claim_random_invalid_provider_400(self):
+        """无效的 provider 应返回 400 + invalid_provider"""
+        with self.assertRaises(self.pool_service.PoolServiceError) as ctx:
+            self.pool_service.claim_random(
+                caller_id="bot",
+                task_id="t_invalid_provider",
+                provider="provider_that_does_not_exist_xyz",
+            )
+        self.assertEqual(ctx.exception.http_status, 400)
+        self.assertEqual(ctx.exception.error_code, "invalid_provider")
 
     def test_complete_claim_invalid_result(self):
         account_id = self._make_account()
