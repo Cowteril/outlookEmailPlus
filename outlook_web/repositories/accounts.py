@@ -16,6 +16,13 @@ COMPACT_SUMMARY_FIELDS = (
     "latest_verification_received_at",
 )
 
+VERIFICATION_CHANNEL_FIELDS = (
+    "graph_inbox",
+    "graph_junk",
+    "imap_new",
+    "imap_old",
+)
+
 
 def _normalize_account_email_domain(email: str) -> str:
     """从邮箱地址提取并规范化域名（小写，去空白）。"""
@@ -145,6 +152,43 @@ def get_account_by_id(account_id: int) -> Optional[Dict]:
     _decrypt_account_field(account, "refresh_token")
     _decrypt_account_field(account, "imap_password")
     return account
+
+
+def get_preferred_verification_channel(account_id: int) -> Optional[str]:
+    db = get_db()
+    row = db.execute(
+        "SELECT preferred_verification_channel FROM accounts WHERE id = ?",
+        (account_id,),
+    ).fetchone()
+    if not row:
+        return None
+    value = str(row["preferred_verification_channel"] or "").strip().lower()
+    if value in VERIFICATION_CHANNEL_FIELDS:
+        return value
+    return None
+
+
+def update_preferred_verification_channel(account_id: int, channel: Optional[str]) -> bool:
+    normalized = str(channel or "").strip().lower()
+    value_to_store: Optional[str]
+    if not normalized:
+        value_to_store = None
+    elif normalized in VERIFICATION_CHANNEL_FIELDS:
+        value_to_store = normalized
+    else:
+        return False
+
+    db = get_db()
+    cursor = db.execute(
+        """
+        UPDATE accounts
+        SET preferred_verification_channel = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (value_to_store, account_id),
+    )
+    db.commit()
+    return cursor.rowcount > 0
 
 
 def add_account(
