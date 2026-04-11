@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import email
 import imaplib
+import logging
 from email.header import decode_header
 from typing import Any, Dict, List, Optional
 
@@ -10,6 +11,8 @@ import requests
 from outlook_web.errors import build_error_payload
 from outlook_web.services.graph import get_access_token_graph
 from outlook_web.services.http import get_response_details
+
+_LOGGER = logging.getLogger(__name__)
 
 # Token 端点
 TOKEN_URL_IMAP = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
@@ -238,6 +241,7 @@ def get_emails_imap_with_server(
 
         status, messages = connection.search(None, "ALL")
         if status != "OK":
+            _LOGGER.debug("[PERF] imap_search | account=%s | server=%s | folder=%s | status=%s (非OK)", account, server, selected_folder, status)
             return {
                 "success": False,
                 "error": build_error_payload(
@@ -249,12 +253,15 @@ def get_emails_imap_with_server(
                 ),
             }
         if not messages or not messages[0]:
+            _LOGGER.debug("[PERF] imap_search | account=%s | server=%s | folder=%s | total=0 (空信箱)", account, server, selected_folder)
             return {"success": True, "emails": []}
 
         message_ids = messages[0].split()
         total = len(message_ids)
         start_idx = max(0, total - skip - top)
         end_idx = total - skip
+
+        _LOGGER.debug("[PERF] imap_search | account=%s | server=%s | folder=%s | total=%d | skip=%d | top=%d | slice=[%d:%d]", account, server, selected_folder, total, skip, top, start_idx, end_idx)
 
         if start_idx >= end_idx:
             return {"success": True, "emails": []}
@@ -279,9 +286,11 @@ def get_emails_imap_with_server(
                             "body_preview": (body_preview[:200] + "..." if len(body_preview) > 200 else body_preview),
                         }
                     )
-            except Exception:
+            except Exception as fetch_err:
+                _LOGGER.debug("[PERF] imap_fetch | account=%s | msg_id=%s | fetch失败: %s", account, msg_id, fetch_err)
                 continue
 
+        _LOGGER.debug("[PERF] imap_result | account=%s | server=%s | fetched=%d / requested=%d", account, server, len(emails_data), len(paged_ids))
         return {"success": True, "emails": emails_data}
     except Exception as exc:
         return {
