@@ -11,9 +11,16 @@
 from __future__ import annotations
 
 import html
+import json
+import logging
 import re
+import time
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional
+
+import requests
+
+from outlook_web.repositories import settings as settings_repo
 
 # 验证码关键词列表（支持中英文）
 VERIFICATION_KEYWORDS = [
@@ -80,6 +87,9 @@ LINK_CONTEXT_PHRASES = [
     "账号验证",
     "账户验证",
 ]
+
+VERIFICATION_AI_SCHEMA_VERSION = "verification_ai_v1"
+_LOGGER = logging.getLogger("outlook_web.services.verification_extractor")
 
 
 class HTMLTextExtractor(HTMLParser):
@@ -431,7 +441,9 @@ def _build_code_regex(*, code_regex: str | None, code_length: str | None) -> re.
     return re.compile(r"\b\d{4,8}\b")
 
 
-def _smart_extract_code_by_keywords(email_content: str, code_re: re.Pattern) -> Optional[str]:
+def _smart_extract_code_by_keywords(
+    email_content: str, code_re: re.Pattern
+) -> Optional[str]:
     if not email_content:
         return None
 
@@ -487,7 +499,9 @@ def _fallback_extract_code(email_content: str, code_re: re.Pattern) -> Optional[
     return candidates[0] if candidates else None
 
 
-def _pick_preferred_link(links: List[str], prefer_link_keywords: List[str]) -> Optional[str]:
+def _pick_preferred_link(
+    links: List[str], prefer_link_keywords: List[str]
+) -> Optional[str]:
     if not links:
         return None
 
@@ -530,7 +544,9 @@ def extract_verification_info_with_options(
     """
     subject = str(email.get("subject") or "").strip()
     content = _extract_content_text_without_subject(email)
-    html_content = str(email.get("body_html") or email.get("html_content") or "").strip()
+    html_content = str(
+        email.get("body_html") or email.get("html_content") or ""
+    ).strip()
 
     source = str(code_source or "all").strip().lower()
     if source == "subject":
@@ -580,7 +596,9 @@ def extract_verification_info_with_options(
                     break
 
     # 总 confidence 向后兼容：取 code / link 中较高者
-    confidence = "high" if code_confidence == "high" or link_confidence == "high" else "low"
+    confidence = (
+        "high" if code_confidence == "high" or link_confidence == "high" else "low"
+    )
 
     parts: List[str] = []
     if verification_code:
@@ -626,9 +644,439 @@ def apply_confidence_gate(extracted: Dict[str, Any]) -> Dict[str, Any]:
     if result.get("link_confidence") != "high":
         result["verification_link"] = None
 
-    parts = [v for v in (result.get("verification_code"), result.get("verification_link")) if v]
+    parts = [
+        v
+        for v in (result.get("verification_code"), result.get("verification_link"))
+        if v
+    ]
     result["formatted"] = " ".join(parts) if parts else None
     result["confidence"] = (
-        "high" if result.get("code_confidence") == "high" or result.get("link_confidence") == "high" else "low"
+        "high"
+        if result.get("code_confidence") == "high"
+        or result.get("link_confidence") == "high"
+        else "low"
+    )
+    return result
+
+
+def get_verification_ai_runtime_config() -> Dict[str, Any]:
+    """读取系统级验证码 AI 配置。"""
+    return {
+        "enabled": settings_repo.get_verification_ai_enabled(),
+        "base_url": settings_repo.get_verification_ai_base_url(),
+        "api_key": settings_repo.get_verification_ai_api_key(),
+        "model": settings_repo.get_verification_ai_model(),
+    }
+
+
+def is_verification_ai_config_complete(config: Dict[str, Any]) -> bool:
+    return bool(
+        (config or {}).get("enabled")
+        and str((config or {}).get("base_url") or "").strip()
+        and str((config or {}).get("api_key") or "").strip()
+        and str((config or {}).get("model") or "").strip()
+    )
+
+
+def build_verification_ai_input_payload(
+    email: Dict[str, Any],
+    *,
+    code_regex: str | None = None,
+    code_length: str | None = None,
+    code_source: str = "all",
+) -> Dict[str, Any]:
+    """构造固定 JSON 输入契约。"""
+    return {
+        "schema_version": VERIFICATION_AI_SCHEMA_VERSION,
+        "task": "extract_verification",
+        "mail": {
+            "subject": str(email.get("subject") or ""),
+            "text": extract_email_text(email),
+            "html": str(email.get("body_html") or email.get("html_content") or ""),
+        },
+        "rules": {
+            "code_regex": str(code_regex or ""),
+            "code_length": str(code_length or ""),
+        },
+        "hints": {
+            "code_source": str(code_source or "all"),
+        },
+    }
+
+
+def _normalize_verification_ai_endpoint(base_url: str) -> str:
+    value = str(base_url or "").strip()
+    if not value:
+        return ""
+    if value.lower().endswith("/chat/completions"):
+        return value
+    return value.rstrip("/") + "/chat/completions"
+
+
+def _parse_verification_ai_content(raw_content: str) -> Optional[Dict[str, Any]]:
+    text = str(raw_content or "").strip()
+    if not text:
+        return None
+
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?", "", text, flags=re.IGNORECASE).strip()
+        text = re.sub(r"```$", "", text).strip()
+
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    def _coerce_text(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, (int, float, bool)):
+            return str(value).strip()
+        return ""
+
+    def _normalize_confidence(value: Any) -> str:
+        if isinstance(value, (int, float)):
+            try:
+                return "high" if float(value) >= 0.5 else "low"
+            except Exception:
+                return "low"
+        if isinstance(value, bool):
+            return "high" if value else "low"
+        text = str(value or "").strip().lower()
+        if text in {"high", "medium", "1", "true", "yes"}:
+            return "high"
+        return "low"
+
+    verification_code = _coerce_text(payload.get("verification_code"))
+    verification_link = _coerce_text(payload.get("verification_link"))
+    if not verification_code and not verification_link:
+        return None
+
+    confidence = _normalize_confidence(payload.get("confidence"))
+    reason_raw = payload.get("reason")
+    reason = _coerce_text(reason_raw)
+    if not reason and reason_raw not in (None, ""):
+        try:
+            reason = json.dumps(reason_raw, ensure_ascii=False)
+        except Exception:
+            reason = ""
+
+    return {
+        "schema_version": VERIFICATION_AI_SCHEMA_VERSION,
+        "verification_code": verification_code,
+        "verification_link": verification_link,
+        "confidence": confidence,
+        "reason": reason,
+    }
+
+
+def _call_verification_ai(
+    ai_config: Dict[str, Any], ai_input: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    endpoint = _normalize_verification_ai_endpoint(
+        str((ai_config or {}).get("base_url") or "")
+    )
+    api_key = str((ai_config or {}).get("api_key") or "").strip()
+    model = str((ai_config or {}).get("model") or "").strip()
+    if not endpoint or not api_key or not model:
+        return None
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    body = {
+        "model": model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是验证码提取器。必须严格返回 JSON，且字段必须为："
+                    "schema_version, verification_code, verification_link, confidence, reason。"
+                    f"schema_version 固定为 {VERIFICATION_AI_SCHEMA_VERSION}。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(ai_input, ensure_ascii=False),
+            },
+        ],
+    }
+
+    try:
+        response = requests.post(endpoint, headers=headers, json=body, timeout=6)
+        response.raise_for_status()
+        payload = response.json()
+        choices = payload.get("choices") if isinstance(payload, dict) else None
+        if not isinstance(choices, list) or not choices:
+            return None
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str):
+            return None
+        return _parse_verification_ai_content(content)
+    except Exception as exc:
+        _LOGGER.warning("verification_ai_call_failed: %s", exc)
+        return None
+
+
+def probe_verification_ai_runtime(
+    *,
+    ai_config: Dict[str, Any],
+    sample_email: Optional[Dict[str, Any]] = None,
+    code_regex: str | None = None,
+    code_length: str | None = "6-6",
+    code_source: str = "all",
+    timeout_seconds: int = 8,
+) -> Dict[str, Any]:
+    """
+    诊断用：主动探测系统级验证码 AI 配置是否可用。
+
+    返回结构（不包含敏感信息）：
+    - ok: bool
+    - error: 错误类别（config_incomplete/http_error/request_failed/invalid_ai_output/invalid_response_format）
+    - message: 人类可读说明
+    - endpoint/model/http_status/latency_ms
+    - parsed_output: 合法输出时返回固定 JSON 契约对象
+    """
+    endpoint = _normalize_verification_ai_endpoint(
+        str((ai_config or {}).get("base_url") or "")
+    )
+    model = str((ai_config or {}).get("model") or "").strip()
+    api_key = str((ai_config or {}).get("api_key") or "").strip()
+
+    missing_fields: list[str] = []
+    if not endpoint:
+        missing_fields.append("verification_ai_base_url")
+    if not api_key:
+        missing_fields.append("verification_ai_api_key")
+    if not model:
+        missing_fields.append("verification_ai_model")
+    if missing_fields:
+        return {
+            "ok": False,
+            "error": "config_incomplete",
+            "message": "验证码 AI 配置不完整",
+            "missing_fields": missing_fields,
+            "endpoint": endpoint,
+            "model": model,
+        }
+
+    email_obj = sample_email or {
+        "subject": "Verification test",
+        "body": "Your verification code is 123456",
+        "body_html": "<p>Your verification code is <b>123456</b></p>",
+    }
+    ai_input = build_verification_ai_input_payload(
+        email_obj,
+        code_regex=code_regex,
+        code_length=code_length,
+        code_source=code_source,
+    )
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+    body = {
+        "model": model,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是验证码提取器。必须严格返回 JSON，且字段必须为："
+                    "schema_version, verification_code, verification_link, confidence, reason。"
+                    f"schema_version 固定为 {VERIFICATION_AI_SCHEMA_VERSION}。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(ai_input, ensure_ascii=False),
+            },
+        ],
+    }
+
+    started = time.monotonic()
+    try:
+        response = requests.post(
+            endpoint,
+            headers=headers,
+            json=body,
+            timeout=max(1, int(timeout_seconds)),
+        )
+        latency_ms = int((time.monotonic() - started) * 1000)
+
+        if response.status_code >= 400:
+            response_preview = (response.text or "").strip()[:500]
+            return {
+                "ok": False,
+                "error": "http_error",
+                "message": f"AI 接口返回 HTTP {response.status_code}",
+                "endpoint": endpoint,
+                "model": model,
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+                "response_preview": response_preview,
+            }
+
+        try:
+            payload = response.json()
+        except Exception:
+            response_preview = (response.text or "").strip()[:500]
+            return {
+                "ok": False,
+                "error": "invalid_response_format",
+                "message": "AI 接口返回非 JSON 响应",
+                "endpoint": endpoint,
+                "model": model,
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+                "response_preview": response_preview,
+            }
+
+        choices = payload.get("choices") if isinstance(payload, dict) else None
+        if not isinstance(choices, list) or not choices:
+            return {
+                "ok": False,
+                "error": "invalid_response_format",
+                "message": "AI 响应缺少 choices 字段",
+                "endpoint": endpoint,
+                "model": model,
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+            }
+
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str):
+            return {
+                "ok": False,
+                "error": "invalid_response_format",
+                "message": "AI 响应缺少 message.content",
+                "endpoint": endpoint,
+                "model": model,
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+            }
+
+        parsed = _parse_verification_ai_content(content)
+        if not parsed:
+            return {
+                "ok": False,
+                "error": "invalid_ai_output",
+                "message": "AI 输出不符合固定 JSON 契约",
+                "endpoint": endpoint,
+                "model": model,
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+                "response_preview": content.strip()[:500],
+            }
+
+        return {
+            "ok": True,
+            "message": "AI 配置测试成功",
+            "endpoint": endpoint,
+            "model": model,
+            "http_status": response.status_code,
+            "latency_ms": latency_ms,
+            "parsed_output": parsed,
+        }
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - started) * 1000)
+        return {
+            "ok": False,
+            "error": "request_failed",
+            "message": f"AI 请求失败：{exc}",
+            "endpoint": endpoint,
+            "model": model,
+            "latency_ms": latency_ms,
+        }
+
+
+def enhance_verification_with_ai_fallback(
+    *,
+    email: Dict[str, Any],
+    extracted: Dict[str, Any],
+    code_regex: str | None = None,
+    code_length: str | None = None,
+    code_source: str = "all",
+) -> Dict[str, Any]:
+    """
+    规则优先、AI 回退：
+    - 规则可信度高的字段不覆盖
+    - 仅在低可信字段上尝试 AI 补全
+    - AI 无效/异常时快速回退规则结果
+    """
+    result = dict(extracted or {})
+
+    code_confidence = str(result.get("code_confidence") or "low").lower()
+    link_confidence = str(result.get("link_confidence") or "low").lower()
+    needs_ai_code = code_confidence != "high"
+    needs_ai_link = link_confidence != "high"
+    if not needs_ai_code and not needs_ai_link:
+        return result
+
+    ai_config = get_verification_ai_runtime_config()
+    if not is_verification_ai_config_complete(ai_config):
+        return result
+
+    ai_input = build_verification_ai_input_payload(
+        email,
+        code_regex=code_regex,
+        code_length=code_length,
+        code_source=code_source,
+    )
+    ai_output = _call_verification_ai(ai_config, ai_input)
+    if not ai_output:
+        return result
+
+    ai_code = str(ai_output.get("verification_code") or "").strip()
+    ai_link = str(ai_output.get("verification_link") or "").strip()
+    ai_confidence = str(ai_output.get("confidence") or "low").strip().lower()
+    ai_reason = str(ai_output.get("reason") or "").strip()
+
+    updated = False
+    if needs_ai_code and ai_code:
+        result["verification_code"] = ai_code.upper()
+        result["code_confidence"] = "high" if ai_confidence == "high" else "low"
+        updated = True
+    if needs_ai_link and ai_link:
+        result["verification_link"] = ai_link
+        result["link_confidence"] = "high" if ai_confidence == "high" else "low"
+        links = result.get("links")
+        links_list = links if isinstance(links, list) else []
+        if ai_link not in links_list:
+            links_list = list(links_list)
+            links_list.append(ai_link)
+        result["links"] = links_list
+        updated = True
+
+    if not updated:
+        return result
+
+    result["ai_schema_version"] = VERIFICATION_AI_SCHEMA_VERSION
+    result["ai_reason"] = ai_reason
+    result["ai_used"] = True
+
+    parts = []
+    if result.get("verification_code"):
+        parts.append(str(result.get("verification_code")))
+    if result.get("verification_link"):
+        parts.append(str(result.get("verification_link")))
+    result["formatted"] = " ".join(parts) if parts else None
+    result["confidence"] = (
+        "high"
+        if result.get("code_confidence") == "high"
+        or result.get("link_confidence") == "high"
+        else "low"
     )
     return result

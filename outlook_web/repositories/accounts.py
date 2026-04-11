@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import sqlite3
 from typing import Any, Dict, List, Optional
 
@@ -16,8 +15,6 @@ COMPACT_SUMMARY_FIELDS = (
     "latest_verification_folder",
     "latest_verification_received_at",
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_account_email_domain(email: str) -> str:
@@ -327,17 +324,10 @@ def delete_account_by_id(account_id: int) -> bool:
     """删除邮箱账号"""
     db = get_db()
     try:
-        db.execute("DELETE FROM account_claim_logs WHERE account_id = ?", (account_id,))
-        db.execute("DELETE FROM account_project_usage WHERE account_id = ?", (account_id,))
-        cursor = db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        db.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
         db.commit()
-        return cursor.rowcount > 0
+        return True
     except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        logger.exception("delete_account_by_id failed: account_id=%s", account_id)
         return False
 
 
@@ -345,12 +335,10 @@ def delete_account_by_email(email_addr: str) -> bool:
     """根据邮箱地址删除账号"""
     db = get_db()
     try:
-        row = db.execute("SELECT id FROM accounts WHERE email = ?", (email_addr,)).fetchone()
-        if not row:
-            return False
-        return delete_account_by_id(int(row["id"]))
+        db.execute("DELETE FROM accounts WHERE email = ?", (email_addr,))
+        db.commit()
+        return True
     except Exception:
-        logger.exception("delete_account_by_email failed: email=%s", email_addr)
         return False
 
 
