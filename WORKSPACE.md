@@ -6,6 +6,47 @@
 
 ## 2026-04-11
 
+### 0t. AI fallback 触发条件收紧：方案 A（任一 high 即跳过 AI）
+
+**时间**：2026-04-11
+
+**背景**：上一轮排查发现 `enhance_verification_with_ai_fallback()` 的触发条件过于宽泛——只要 code 或 link 任一字段低置信就会触发 AI 调用。这导致"验证码已高置信命中，但因为链接低置信，仍然会打 AI"的浪费。
+
+**用户决策**：采用方案 A——任一字段高置信即跳过 AI，对外仍保留 `verification_code`/`verification_link` 双字段结构。
+
+**本次代码改动（已完成）**：
+
+1. 文件：`outlook_web/services/verification_extractor.py`
+   - `enhance_verification_with_ai_fallback()` 触发条件从 `if not needs_ai_code and not needs_ai_link` 改为 `if code_confidence == "high" or link_confidence == "high": return result`
+   - 因为只有 both-low 才会进入 AI 分支，`needs_ai_code`/`needs_ai_link` 不再需要，移除条件守卫
+   - 对外 API 返回结构（`verification_code`/`verification_link`/`formatted`）不变
+
+2. 新增测试文件：`tests/test_ai_fallback_trigger_condition.py`（12 用例）
+   - `AiFallbackTriggerConditionTests`：8 个用例覆盖核心触发逻辑
+     - code=high + link=high → 不触发 AI
+     - code=high + link=low → 不触发 AI
+     - code=low + link=high → 不触发 AI
+     - code=low + link=low → 触发 AI
+     - AI 关闭 → 不触发
+     - AI 配置不完整 → 不触发
+     - AI 返回 None → 回退规则
+     - AI 返回空 → 回退规则
+   - `AiFallbackEdgeCaseTests`：4 个边界用例
+     - confidence 字段缺失默认 low
+     - 空 extracted 触发 AI
+     - link_confidence 缺失但 code=high → 不触发
+
+**全量回归结果**：
+
+1. 执行命令：`python -m unittest discover -s tests 2>&1`
+2. 结果：`Ran 967 tests in 204.140s`，`OK (skipped=7)`，0 failures。
+
+**文档同步**：
+
+1. `CHANGELOG.md`：补充 AI fallback 触发条件收紧说明。
+
+---
+
 ### 0n. 邮件通知测试接口 502 回归修复 + 文档实况同步（本次会话补记）
 
 **时间**：2026-04-11

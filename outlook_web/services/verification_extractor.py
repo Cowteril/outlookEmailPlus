@@ -1012,17 +1012,16 @@ def enhance_verification_with_ai_fallback(
 ) -> Dict[str, Any]:
     """
     规则优先、AI 回退：
-    - 规则可信度高的字段不覆盖
-    - 仅在低可信字段上尝试 AI 补全
+    - 任一字段高置信即跳过 AI（方案 A：一个 high 就够了）
+    - 仅在 code/link 均为 low 时才触发 AI
     - AI 无效/异常时快速回退规则结果
     """
     result = dict(extracted or {})
 
     code_confidence = str(result.get("code_confidence") or "low").lower()
     link_confidence = str(result.get("link_confidence") or "low").lower()
-    needs_ai_code = code_confidence != "high"
-    needs_ai_link = link_confidence != "high"
-    if not needs_ai_code and not needs_ai_link:
+    # 方案 A：任一 high 即跳过 AI，只有 both-low 才触发
+    if code_confidence == "high" or link_confidence == "high":
         return result
 
     ai_config = get_verification_ai_runtime_config()
@@ -1045,11 +1044,11 @@ def enhance_verification_with_ai_fallback(
     ai_reason = str(ai_output.get("reason") or "").strip()
 
     updated = False
-    if needs_ai_code and ai_code:
+    if ai_code:
         result["verification_code"] = ai_code.upper()
         result["code_confidence"] = "high" if ai_confidence == "high" else "low"
         updated = True
-    if needs_ai_link and ai_link:
+    if ai_link:
         result["verification_link"] = ai_link
         result["link_confidence"] = "high" if ai_confidence == "high" else "low"
         links = result.get("links")
