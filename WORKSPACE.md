@@ -8,6 +8,35 @@
 
 ### 操作记录
 
+#### 41. 邮箱别名（+ 子地址）自动识别与无缝迁移测试补齐
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 在干净分支上实现邮箱别名回溯能力
+   - 新增 `normalize_alias_email(email_addr)`：将 `user+tag@domain` 规范化为 `user@domain`
+   - 在 `resolve_mailbox()` 入口统一接入 normalize
+   - 在 `controllers/emails.py` 入口补齐 normalize：
+     - `_parse_external_common_args()`
+     - `api_get_emails()`
+     - `api_get_email_detail()`
+
+2. 测试补齐（专属迁移场景）
+   - 新增 `tests/test_email_alias_normalize.py`
+   - 新增 `tests/test_email_alias_flow.py`
+   - 新增 `tests/test_email_alias_migration_compat.py`
+   - 补充 `tests/test_mailbox_resolver.py`：`test_resolve_mailbox_supports_plus_alias_lookup`
+
+3. 回归结果
+   - `python -m unittest tests.test_email_alias_normalize tests.test_mailbox_resolver tests.test_email_alias_flow tests.test_email_alias_migration_compat -v`
+   - 结果：`Ran 20 tests in 7.103s`，`OK`
+
+4. 文档同步
+   - `CHANGELOG.md`（v1.15.0）补充邮箱别名能力与测试覆盖说明
+
+---
+
 #### 40. 统一同步其他分支到 main（本地 + 远端）
 
 **时间**：2026-04-13
