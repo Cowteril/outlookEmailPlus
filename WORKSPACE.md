@@ -8,6 +8,74 @@
 
 ### 操作记录
 
+#### 32. v1.16.0 发布准备（版本更新 + 日志同步）
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 读取发布规范与版本记录
+   - 读取 `RELEASE.md`（确认本仓库发布产物为 Docker tar + 源码 zip，非 Tauri MSI/NSIS）
+   - 读取 `docs/DEVLOG.md`（确认当前最新记录 `v1.15.1`）
+
+2. 按发布流程更新版本号与版本展示
+   - `outlook_web/__init__.py`：`1.15.0` → `1.16.0`
+   - `tests/test_version_update.py`：版本断言 `1.16.0`
+   - `README.md` / `README.en.md`：当前稳定版本更新为 `v1.16.0`
+
+3. 同步发布记录
+   - `CHANGELOG.md`：新增 `## [v1.16.0] - 2026-04-13`
+     - 结构包含：新增功能 / 修复 / 重要变更 / 测试验证
+   - `docs/DEVLOG.md`：新增 `v1.16.0` 版本记录
+
+4. 工作区记录
+   - 同步将本次发布准备步骤写入 `WORKSPACE.md`
+
+---
+
+#### 31. 更新 steering 文档与 CLAUDE.md（按当前代码架构同步）
+
+**时间**：2026-04-13
+
+**本次操作**：
+
+1. 按“仅基于当前代码现状”重新核对项目架构信息
+   - 核查入口与装配：`outlook_web/app.py`、`outlook_web/__init__.py`
+   - 核查 DB 与 schema：`outlook_web/db.py`（`DB_SCHEMA_VERSION=21`）、实际库表清单（24 张）
+   - 核查 OAuth 工具现状：
+     - `outlook_web/routes/token_tool.py`
+     - `outlook_web/controllers/token_tool.py`
+     - `outlook_web/services/oauth_tool.py`
+     - `templates/token_tool.html`
+     - `static/js/features/token_tool.js`
+   - 核查 CI/测试口径：
+     - `.github/workflows/python-tests.yml`（CI 使用 unittest）
+     - 本地全量实测命令：`python -m pytest tests/ -q`
+
+2. 更新 `.kiro/steering`（仅改项目现状相关内容）
+   - `project-overview.md`
+     - 修正目录树中的 `config.py` 重复项
+     - 更新测试文件数量口径（`test_*.py` 约 97，tests 下 Python 文件约 105）
+     - 增补 OAuth 工具“获取授权链接”交互模式（替代自动弹窗）
+     - 更新测试命令口径（本地 pytest、CI unittest）
+   - `architecture.md`
+     - OAuth Token 工具流程补充“前端展示授权链接 -> 用户手动打开/复制”
+     - 架构结论补充“授权链接模式”的现状描述
+   - `tech-stack.md`
+     - 前端实现补充 Token 工具授权链接模式
+     - 测试章节补充“本地 pytest / CI unittest”双口径
+
+3. 更新项目根 `CLAUDE.md`
+   - 常用命令区新增“本地全量回归（pytest）”
+   - 保留“CI 同款 unittest”命令
+   - OAuth 工具章节补充“获取授权链接 -> 手动粘贴回调 URL”流程
+
+4. 执行边界
+   - 本次仅更新：`.kiro/steering/*` + `CLAUDE.md` + `WORKSPACE.md`
+   - 未改动其他业务代码与非目标文档
+
+---
+
 #### 30. OAuth Token 服务层修复 + main 全量回归验证
 
 **时间**：2026-04-13

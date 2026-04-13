@@ -1,5 +1,34 @@
 # DEVLOG
 
+## v1.16.0 - OAuth Token 授权链接模式与 flow 修复
+
+发布日期：2026-04-13
+
+### 新增功能
+
+- OAuth Token 工具改为“获取授权链接”交互模式：用户可在页面中直接获取、复制、打开授权链接，再手动粘贴回调 URL 进行 token 交换。
+- Token 工具三层模块（routes/controllers/services）补充设计注释，明确兼容导入模式与安全校验链路。
+
+### 修复
+
+- 修复 `outlook_web/services/oauth_tool.py` 中 `get_oauth_flow()` 函数体缺失导致的 `IndentationError`。
+- 恢复 OAuth flow 读取逻辑：过期清理、状态读取、浅拷贝返回，修复授权回调后的交换链路稳定性。
+
+### 重要变更
+
+- 版本号从 `1.15.0` 升级至 `1.16.0`。
+- 版本展示与断言同步更新：`tests/test_version_update.py`、`README.md`、`README.en.md`。
+- 文档口径同步：`.kiro/steering/*` 与 `CLAUDE.md` 已按当前代码架构与测试流程更新。
+
+### 测试/验证
+
+- 全量回归：`python -m pytest tests/ -q` → `1109 passed, 9 skipped`
+- 关键专项：
+  - `python -m pytest tests/test_version_update.py -v` → `51 passed`
+  - `python -m pytest tests/test_oauth_tool.py -v` → `71 passed`
+- 语法检查：
+  - `python -m py_compile outlook_web/services/oauth_tool.py outlook_web/controllers/token_tool.py outlook_web/routes/token_tool.py` ✅
+
 ## v1.15.1 - CI 质量门禁修复与发布链路恢复
 
 发布日期：2026-04-12

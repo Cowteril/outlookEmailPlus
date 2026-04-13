@@ -2,6 +2,32 @@
 
 All notable changes to OutlookMail Plus are documented in this file.
 
+## [v1.16.0] - 2026-04-13
+
+### 新功能 / New Features
+
+- **OAuth Token 工具交互升级**：Token 工具前端从自动弹窗改为“获取授权链接”模式，支持在页面内直接展示 `authorize_url`，并提供复制/打开链接操作，提升跨环境授权稳定性。
+- **Token 工具文档化增强**：为 `routes/token_tool.py`、`controllers/token_tool.py`、`services/oauth_tool.py` 增补模块级设计说明，明确兼容账号导入模式（`tenant=consumers`、`client_secret` 为空）与授权流关键约束。
+
+### 修复 / Bug Fixes
+
+- **OAuth flow 状态读取修复**：修复 `services/oauth_tool.py:get_oauth_flow()` 函数体缺失导致的 `IndentationError` 与 flow 状态读取异常；恢复过期清理与浅拷贝返回逻辑。
+- **回调交换链路稳定性**：修复后 `state -> verifier -> code exchange` 链路恢复正常，避免授权成功后在服务端交换阶段失败。
+
+### 重要变更 / Important Changes
+
+- **版本升级**：`outlook_web.__version__` 从 `1.15.0` 升级到 `1.16.0`。
+- **版本显示同步**：同步更新 `tests/test_version_update.py`、`README.md`、`README.en.md` 中的版本展示与断言口径。
+- **文档现状同步**：同步更新 `.kiro/steering/*` 与 `CLAUDE.md` 的架构/测试口径描述（授权链接模式、本地 pytest 与 CI unittest 双口径）。
+
+### 测试/验证 / Testing & Verification
+
+- 全量回归：`python -m pytest tests/ -q` → **1109 passed, 9 skipped**。
+- 关键回归：
+  - `python -m pytest tests/test_version_update.py -v` → 51 passed
+  - `python -m pytest tests/test_oauth_tool.py -v` → 71 passed
+- 语法校验：`python -m py_compile outlook_web/services/oauth_tool.py outlook_web/controllers/token_tool.py outlook_web/routes/token_tool.py` 通过。
+
 ## [v1.15.0] - 2026-04-12
 
 ### 新功能 / New Features
