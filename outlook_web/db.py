@@ -32,7 +32,8 @@ from outlook_web.security.crypto import (
 # v16：2026-03-28 patch — 修补 idx_temp_emails_task_token_unique 唯一索引（v15 旧库迁移代码未包含该索引，导致老库升级后缺失）
 # v17：2026-04-02 project-scoped pool reuse — accounts 表新增 email_domain 列，account_project_usage 表（project_key 防同项目重复领取），external_probe_cache 表新增 baseline_timestamp 列
 # v18：2026-04-09 CF临时邮箱接入邮箱池 — accounts 表新增 temp_mail_meta 列（JSON 格式存储 CF 邮箱元数据）
-DB_SCHEMA_VERSION = 19
+# v20：2026-04-12 危险邮件预警功能 — email_security_scans 表（存储邮件安全扫描结果）
+DB_SCHEMA_VERSION = 20
 DB_SCHEMA_VERSION_KEY = "db_schema_version"
 DB_SCHEMA_LAST_UPGRADE_TRACE_ID_KEY = "db_schema_last_upgrade_trace_id"
 DB_SCHEMA_LAST_UPGRADE_ERROR_KEY = "db_schema_last_upgrade_error"
@@ -1028,6 +1029,46 @@ def init_db(database_path: Optional[str] = None):
         accounts_columns_v18 = [col[1] for col in cursor.fetchall()]
         if "temp_mail_meta" not in accounts_columns_v18:
             cursor.execute("ALTER TABLE accounts ADD COLUMN temp_mail_meta TEXT")
+
+        # v20: 危险邮件预警功能 — 创建 email_security_scans 表
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS email_security_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                email_id TEXT NOT NULL,
+                account_email TEXT NOT NULL,
+                risk_level TEXT NOT NULL CHECK(risk_level IN ('safe', 'low', 'medium', 'high')),
+                risks TEXT NOT NULL,
+                scan_time TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(account_id, email_id),
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+            )
+        """)
+
+        # 检查并添加缺失的列（处理已存在的表）
+        cursor.execute("PRAGMA table_info(email_security_scans)")
+        existing_columns = {col[1] for col in cursor.fetchall()}
+
+        if 'account_email' not in existing_columns:
+            cursor.execute("ALTER TABLE email_security_scans ADD COLUMN account_email TEXT NOT NULL DEFAULT ''")
+            print("Added missing account_email column to email_security_scans table")
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_email_security_scans_account_id
+            ON email_security_scans(account_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_email_security_scans_risk_level
+            ON email_security_scans(risk_level)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_email_security_scans_scan_time
+            ON email_security_scans(scan_time DESC)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_email_security_scans_composite
+            ON email_security_scans(account_id, risk_level, scan_time DESC)
+        """)
 
         # 迁移现有明文数据为加密数据
         migrate_sensitive_data(conn)

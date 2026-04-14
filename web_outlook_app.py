@@ -15,6 +15,10 @@ Outlook 邮件 Web 应用（兼容入口）
 """
 
 import os
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 from outlook_web.app import create_app
 from outlook_web.db import create_sqlite_connection

@@ -10,3 +10,4 @@ python-dotenv>=1.0.0
 redis>=5.0.0
 rq>=1.16.0
 docker>=6.0.0
+Flask-Login>=0.6.0

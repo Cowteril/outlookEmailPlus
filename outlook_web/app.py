@@ -37,9 +37,9 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
             external_temp_emails,
             groups,
             jobs,
-            oauth,
             pages,
             scheduler,
+            security,
             settings,
             system,
             tags,
@@ -151,6 +151,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_blueprint(audit.create_blueprint())
         app.register_blueprint(external_pool.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(external_temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
+        app.register_blueprint(security.create_blueprint())
 
         # 打印初始化信息
         print("=" * 60)

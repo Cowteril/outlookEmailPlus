@@ -563,6 +563,14 @@ html[data-theme="dark"] #themeToggleBtn::before {
 .stat-card.stat-success { border-left: 3px solid var(--clr-jade); }
 .stat-card.stat-danger  { border-left: 3px solid var(--clr-danger); }
 .stat-card.stat-accent  { border-left: 3px solid var(--clr-accent); }
+.stat-card.stat-warning {
+  border-left: 3px solid #ff6b6b;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+}
+.stat-card.stat-warning:hover {
+  background: linear-gradient(135deg, #fee 0%, #ffffff 100%);
+  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.2);
+}
 
 /* Dashboard 两列布局 */
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }

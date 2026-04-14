@@ -583,6 +583,21 @@
                 el('statExpiredTokens', expiredTokens);
                 el('statTempEmails', tempData.success ? (tempData.emails || []).length : 0);
 
+                // Load security alerts stats
+                try {
+                    const securityRes = await fetch('/api/security/stats?days=7');
+                    const securityData = await securityRes.json();
+                    if (securityData.success && securityData.stats) {
+                        const riskyCount = (securityData.stats.high || 0) + (securityData.stats.medium || 0);
+                        el('statSecurityAlerts', riskyCount > 0 ? riskyCount : '0');
+                    } else {
+                        el('statSecurityAlerts', '0');
+                    }
+                } catch (e) {
+                    console.warn('Failed to load security stats:', e);
+                    el('statSecurityAlerts', '0');
+                }
+
                 // Update topbar subtitle with summary
                 const sub = document.getElementById('topbarSubtitle');
                 if (sub && currentPage === 'dashboard') {
@@ -4562,3 +4577,149 @@ ${details}
                 btn.textContent = translateAppTextLocal('立即更新');
             }
         }
+
+// ==================== 危险邮件预警功能 ====================
+
+/**
+ * 显示危险邮件预警模态框
+ */
+function showSecurityAlerts() {
+    const modal = document.getElementById('securityAlertsModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        loadSecurityAlerts();
+    }
+}
+
+/**
+ * 关闭危险邮件预警模态框
+ */
+function closeSecurityAlertsModal() {
+    const modal = document.getElementById('securityAlertsModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * 关闭危险邮件预警模态框并返回仪表盘
+ */
+function closeSecurityAlertsModalAndReturnToDashboard() {
+    closeSecurityAlertsModal();
+    navigate('dashboard');
+    // 重新加载仪表盘数据以刷新预警统计
+    setTimeout(() => {
+        loadDashboard();
+    }, 100);
+}
+
+/**
+ * 加载危险邮件数据
+ */
+async function loadSecurityAlerts() {
+    // 加载统计信息
+    try {
+        const statsRes = await fetch('/api/security/stats?days=7');
+        const statsData = await statsRes.json();
+        
+        if (statsData.success && statsData.stats) {
+            const stats = statsData.stats;
+            updateElement('securityHighRisk', stats.high || 0);
+            updateElement('securityMediumRisk', stats.medium || 0);
+            updateElement('securityLowRisk', stats.low || 0);
+            updateElement('securitySafe', stats.safe || 0);
+        }
+    } catch (e) {
+        console.warn('Failed to load security stats:', e);
+    }
+
+    // 加载风险邮件列表
+    try {
+        const emailsRes = await fetch('/api/security/risky-emails?limit=50');
+        const emailsData = await emailsRes.json();
+        
+        const listContainer = document.getElementById('securityAlertsList');
+        if (!listContainer) return;
+
+        if (emailsData.success && emailsData.emails && emailsData.emails.length > 0) {
+            listContainer.innerHTML = emailsData.emails.map(email => {
+                const riskBadge = getRiskBadge(email.risk_level);
+                const risksList = email.risks && email.risks.length > 0 
+                    ? email.risks.map(r => `<li>${escapeHtml(r)}</li>`).join('')
+                    : '<li>无详细风险信息</li>';
+                
+                return `
+                    <div style="border: 1px solid #e5e5e5; border-radius: 6px; padding: 12px; margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">
+                                    ${escapeHtml(email.account_email || 'Unknown')}
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-muted);">
+                                    邮件ID: ${escapeHtml(email.email_id || 'N/A')}
+                                </div>
+                            </div>
+                            <div style="margin-left: 12px;">
+                                ${riskBadge}
+                            </div>
+                        </div>
+                        ${email.risks && email.risks.length > 0 ? `
+                            <div style="margin-top: 8px;">
+                                <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">检测到的风险：</div>
+                                <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: var(--text-muted);">
+                                    ${risksList}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+                            扫描时间: ${email.scan_time ? new Date(email.scan_time).toLocaleString('zh-CN') : 'N/A'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            listContainer.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">没有发现危险邮件</div>
+                    <div style="font-size: 13px;">您的邮箱很安全，最近7天未检测到风险邮件</div>
+                </div>
+            `;
+        }
+    } catch (e) {
+        console.error('Failed to load risky emails:', e);
+        const listContainer = document.getElementById('securityAlertsList');
+        if (listContainer) {
+            listContainer.innerHTML = `
+                <div style="text-align: center; color: var(--clr-danger); padding: 40px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 12px;">❌</div>
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">加载失败</div>
+                    <div style="font-size: 13px;">无法加载风险邮件列表，请稍后重试</div>
+                </div>
+            `;
+        }
+    }
+}
+
+/**
+ * 获取风险等级徽章HTML
+ */
+function getRiskBadge(riskLevel) {
+    const badges = {
+        high: '<span style="display: inline-block; padding: 4px 8px; background: #fee; border: 1px solid #fcc; border-radius: 4px; font-size: 12px; font-weight: 600; color: #c33;">🔴 高危</span>',
+        medium: '<span style="display: inline-block; padding: 4px 8px; background: #fef5e7; border: 1px solid #fdebd0; border-radius: 4px; font-size: 12px; font-weight: 600; color: #f39c12;">🟡 中危</span>',
+        low: '<span style="display: inline-block; padding: 4px 8px; background: #eaf2f8; border: 1px solid #d6eaf8; border-radius: 4px; font-size: 12px; font-weight: 600; color: #3498db;">🔵 低危</span>',
+        safe: '<span style="display: inline-block; padding: 4px 8px; background: #eafaf1; border: 1px solid #d5f4e6; border-radius: 4px; font-size: 12px; font-weight: 600; color: #27ae60;">✅ 安全</span>'
+    };
+    return badges[riskLevel] || badges.safe;
+}
+
+/**
+ * 更新元素内容（如果元素存在）
+ */
+function updateElement(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = value;
+    }
+}
