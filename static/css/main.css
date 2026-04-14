@@ -21,7 +21,6 @@
   --clr-success:        #067647;
   --clr-warn:           #B54708;
 
-<<<<<<< HEAD
   /* 中性底色（纸张/墨） */
   --bg:                 #F6F3EE;
   --bg-card:            rgba(255,255,255,0.72);
@@ -34,7 +33,6 @@
   --bg-hover:           rgba(16,18,22,0.04);
   --shadow:             rgba(16, 18, 22, 0.10);
   --shadow-strong:      rgba(16, 18, 22, 0.18);
-=======
   --bg:                 #F5EDE0;
   --bg-card:            #FDFAF5;
   --bg-sidebar:         #2C1A0E;
@@ -46,7 +44,6 @@
   --bg-hover:           rgba(184,92,56,0.06);
   --bg-secondary:       #F0E8D8;
   --shadow:             rgba(44, 24, 16, 0.12);
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
 
   /* 排版：标题用衬线/展示体，正文用清爽无衬线 */
   --font-sans: "Segoe UI", "Noto Sans SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
@@ -61,7 +58,6 @@
 }
 
 [data-theme="dark"] {
-<<<<<<< HEAD
   /* Cursor-like dark neutrals */
   --bg:             #0F1115;
   --bg-card:        rgba(20, 22, 28, 0.78);
@@ -74,7 +70,6 @@
   --bg-hover:       rgba(230,234,242,0.06);
   --shadow:         rgba(0, 0, 0, 0.62);
   --shadow-strong:  rgba(0, 0, 0, 0.78);
-=======
   --bg:             #1A1208;
   --bg-card:        #241A0F;
   --bg-sidebar:     #120C04;
@@ -86,7 +81,6 @@
   --bg-hover:        rgba(184,92,56,0.1);
   --bg-secondary:    #1E1609;
   --shadow:         rgba(0, 0, 0, 0.4);
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
 }
 
 /* ---------- Reset ---------- */

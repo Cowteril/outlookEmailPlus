@@ -36,11 +36,8 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
             external_pool,
             external_temp_emails,
             groups,
-<<<<<<< HEAD
             jobs,
             oauth,
-=======
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
             pages,
             scheduler,
             settings,

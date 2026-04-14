@@ -508,16 +508,13 @@
                 if (tempContainer) tempContainer.innerHTML = errHTML;
             } finally {
                 if (refreshBtn) {
-<<<<<<< HEAD
                     refreshBtn.disabled = false;
                     refreshBtn.textContent = translateAppTextLocal('获取邮件');
-=======
                     // 仅当前最新请求结束时才恢复按钮状态，避免旧请求提前解锁。
                     if (requestSeq === tempEmailMessagesRequestSeq) {
                         refreshBtn.disabled = false;
                         refreshBtn.textContent = translateAppTextLocal('🔄 获取邮件');
                     }
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                 }
             }
         }

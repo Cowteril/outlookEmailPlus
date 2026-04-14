@@ -7,11 +7,8 @@
     <title>Outlook 邮件管理</title>
     <link rel="icon" type="image/png" href="/img/ico.png">
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
-<<<<<<< HEAD
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-=======
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v={{ APP_VERSION }}">
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
 </head>
 
 <body>
@@ -224,10 +221,7 @@
                                 <span id="currentGroupName">选择分组</span>
                             </span>
                             <div style="display:flex;gap:4px;align-items:center;">
-<<<<<<< HEAD
                                 <button id="registerOutlookBtn" class="btn btn-sm btn-primary" onclick="showGetRefreshTokenModal()" title="通过 OAuth 获取 Token 注册 Outlook 账号" style="display:none;">注册</button>
-=======
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                                 <button class="btn-icon" onclick="showTagManagementModal()" title="管理标签">🏷️</button>
                                 <button class="btn-icon" onclick="showAddAccountModal()" title="导入账号">+</button>
                             </div>
@@ -257,10 +251,7 @@
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('add')">打标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('remove')">去标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchMoveGroupModal()">移动分组</button>
-<<<<<<< HEAD
-=======
                             <button class="btn btn-sm btn-primary" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                             <button class="btn btn-sm btn-danger" onclick="showBatchDeleteConfirm()">删除</button>
                         </div>
                     </div>
@@ -273,13 +264,10 @@
                         <div class="column-header">
                             <div style="display:flex;align-items:center;gap:8px;">
                                 <div class="email-tabs" id="folderTabs" style="display:none;border:none;">
-<<<<<<< HEAD
                                     <button class="email-tab active" data-folder="inbox" onclick="switchFolder('inbox')">收件箱</button>
                                     <button class="email-tab" data-folder="junkemail" onclick="switchFolder('junkemail')">垃圾邮件</button>
-=======
                                     <button class="email-tab active" data-folder="inbox" onclick="switchFolder('inbox')">📨 收件箱</button>
                                     <button class="email-tab" data-folder="junkemail" onclick="switchFolder('junkemail')">⚠️ 垃圾邮件</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                                 </div>
                                 <span style="font-size:0.82rem;color:var(--text-muted);" id="emailCount"></span>
                                 <span id="methodTag" style="display:none;" class="badge badge-gray"></span>
@@ -303,7 +291,6 @@
                         <div id="emailBatchActionBar" class="batch-action-bar" style="display:none;">
                             <span id="emailSelectedCount" style="font-size:0.78rem;color:var(--text-muted);">已选 0 项</span>
                             <div style="flex:1;"></div>
-<<<<<<< HEAD
                             <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">删除</button>
                         </div>
                         <div id="emailDetailSection" style="display:none;border-top:1px solid var(--border);">
@@ -311,7 +298,6 @@
                                 <button class="btn btn-sm btn-ghost" onclick="showEmailList()">返回</button>
                                 <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">全屏查看</button>
                                 <button class="btn btn-sm btn-secondary" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">验证码</button>
-=======
                             <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">🗑️ 删除</button>
                         </div>
                         <div id="emailDetailSection" style="display:none;border-top:1px solid var(--border);">
@@ -319,17 +305,13 @@
                                 <button class="btn btn-sm btn-ghost" onclick="showEmailList()">← 返回</button>
                                 <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">🔍 全屏查看</button>
                                 <button class="btn btn-sm btn-accent" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                                 <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;margin-left:8px;cursor:pointer;">
                                     <input type="checkbox" id="trustEmailCheckbox" onchange="toggleTrustMode(this)">
                                     <span style="user-select:none;">信任此邮件</span>
                                 </label>
                                 <div style="flex:1;"></div>
-<<<<<<< HEAD
                                 <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">删除</button>
-=======
                                 <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">🗑️ 删除</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                             </div>
                             <div class="email-detail-container" id="emailDetail">
                                 <div class="empty-state">
@@ -382,10 +364,7 @@
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('add')">打标签</button>
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('remove')">去标签</button>
                                 <button class="btn-inline" onclick="showBatchMoveGroupModal()">移动分组</button>
-<<<<<<< HEAD
-=======
                                 <button class="btn-inline" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                                 <button class="btn-inline primary" onclick="showBatchDeleteConfirm()">删除</button>
                             </div>
                         </div>
@@ -475,7 +454,6 @@
             </div>
 
             <!-- ===== Page: Settings ===== -->
-<<<<<<< HEAD
             <div class="page page-hidden" id="page-settings" style="padding: 1.5rem; max-width: 720px;">
                 <div class="card">
                     <div class="card-header">
@@ -735,7 +713,6 @@
                             <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
                         </div>
                     </div>
-=======
             <div class="page page-hidden" id="page-settings" style="padding: 1.5rem;">
                 <!-- 整体 Tab 容器（Tab 导航 + 内容区共用一个卡片外壳） -->
                 <div class="settings-card-shell">
@@ -746,7 +723,6 @@
                     <button class="settings-tab" data-tab="temp-mail" onclick="switchSettingsTab('temp-mail')">临时邮箱</button>
                     <button class="settings-tab" data-tab="api-security" onclick="switchSettingsTab('api-security')">API 安全</button>
                     <button class="settings-tab" data-tab="automation" onclick="switchSettingsTab('automation')">自动化</button>
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
                 </div>
 
                 <!-- Tab 内容区 -->

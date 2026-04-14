@@ -2718,7 +2718,6 @@ ${details}
             }
         }
 
-<<<<<<< HEAD
         // 开始轮询
         function startPolling() {
             if (isPolling || !currentAccount) {
@@ -3010,8 +3009,6 @@ ${details}
             }
         }
 
-=======
->>>>>>> 28529276e853beba7c04374f8dea06dcec12e36a
         // ==================== 工具函数 ====================
 
         // 相对时间格式化
