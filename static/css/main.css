@@ -530,6 +530,194 @@ textarea.form-input {
 .account-group-name { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.15rem; }
 .account-token-badge { position: absolute; top: 0.6rem; right: 0.6rem; }
 
+/* Refresh status badge */
+.refresh-status-badge {
+  position: absolute; top: 2.4rem; right: 0.6rem; z-index: 10;
+  font-size: 0.75rem; width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--bg); border: 2px solid var(--border);
+  color: var(--text-muted); transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.account-card:hover .refresh-status-badge {
+  transform: scale(1.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.refresh-status-badge[data-refresh-status="idle"] {
+  background: var(--bg); color: var(--text-muted);
+  border-color: var(--border);
+}
+.refresh-status-badge[data-refresh-status="success"] {
+  background: var(--clr-jade); color: white;
+  border-color: #3A7D44;
+  animation: pulse 1s ease-in-out;
+  box-shadow: 0 0 12px rgba(58, 125, 68, 0.4);
+}
+.refresh-status-badge[data-refresh-status="failed"] {
+  background: var(--clr-danger); color: white;
+  border-color: #C0392B;
+  animation: shake 0.5s ease-in-out;
+  box-shadow: 0 0 12px rgba(192, 57, 43, 0.4);
+}
+.refresh-status-badge[data-refresh-status="processing"] {
+  background: var(--clr-primary); color: white;
+  border-color: #B85C38;
+  animation: spin 1s linear infinite;
+  box-shadow: 0 0 12px rgba(184, 92, 56, 0.4);
+}
+
+/* Refresh status tooltip */
+.refresh-status-badge::after {
+  content: '刷新状态';
+  position: absolute;
+  bottom: 120%;
+  right: 0;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 11;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+
+.refresh-status-badge[data-refresh-status="processing"]::after {
+  content: '正在刷新...';
+}
+
+.refresh-status-badge[data-refresh-status="success"]::after {
+  content: '刷新成功';
+}
+
+.refresh-status-badge[data-refresh-status="failed"]::after {
+  content: '刷新失败';
+}
+
+.refresh-status-badge:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-4px);
+}
+
+.refresh-status-badge::before {
+  content: '';
+  position: absolute;
+  bottom: 110%;
+  right: 6px;
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(0,0,0,0.8) transparent transparent transparent;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 11;
+  pointer-events: none;
+}
+
+.refresh-status-badge:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-4px);
+}
+
+/* Animations */
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow: 0 0 12px rgba(58, 125, 68, 0.4); }
+  50% { transform: scale(1.15); box-shadow: 0 0 20px rgba(58, 125, 68, 0.6); }
+  100% { transform: scale(1); box-shadow: 0 0 12px rgba(58, 125, 68, 0.4); }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  50% { transform: translateX(3px); }
+  75% { transform: translateX(-3px); }
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Smooth transition for all status changes */
+.refresh-status-badge {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced tooltip animation */
+.refresh-status-badge::after,
+.refresh-status-badge::before {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Refresh history styles */
+.refresh-history-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.refresh-history-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--border-light);
+  transition: background-color 0.2s ease;
+}
+
+.refresh-history-item:last-child {
+  border-bottom: none;
+}
+
+.refresh-history-item:hover {
+  background-color: var(--bg-light);
+}
+
+.refresh-history-status {
+  font-size: 1.2rem;
+  margin-right: 1rem;
+  min-width: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-history-status.success {
+  color: var(--clr-jade);
+}
+
+.refresh-history-status.danger {
+  color: var(--clr-danger);
+}
+
+.refresh-history-time {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-right: 1rem;
+  min-width: 120px;
+}
+
+.refresh-history-message {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.refresh-history-container .loading,
+.refresh-history-container .no-history,
+.refresh-history-container .error {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .account-card-bottom {
   display: flex; align-items: center; justify-content: space-between;
   margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--border-light);
@@ -1053,14 +1241,14 @@ textarea.form-input {
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.45);
   display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 1rem; backdrop-filter: blur(2px);
+  z-index: 99999; padding: 1rem; backdrop-filter: blur(2px);
 }
 /* .modal as overlay (existing modals.html pattern) */
 .modal {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.45);
   display: none; align-items: center; justify-content: center;
-  z-index: 1000; padding: 1rem; backdrop-filter: blur(2px);
+  z-index: 99999; padding: 1rem; backdrop-filter: blur(2px);
 }
 .modal.show { display: flex; }
 .modal-content, .modal > .modal-box {
