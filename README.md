@@ -219,6 +219,12 @@ python -m unittest discover -s tests -v
   Web 服务监听地址
 - `SCHEDULER_AUTOSTART`
   是否自动启动后台调度器
+- `REDIS_URL`
+  启用消息队列（RQ）所需的 Redis 连接串，例如 `redis://localhost:6379/0`
+- `QUEUE_ENABLED`
+  是否启用队列。默认：配置了 `REDIS_URL` 时自动启用
+- `QUEUE_NAME`
+  队列名称，默认 `outlook-email-plus`
 - `OAUTH_CLIENT_ID`
   Outlook OAuth 应用 ID
 - `OAUTH_REDIRECT_URI`
@@ -335,6 +341,33 @@ ALLOW_LOGIN_PASSWORD_CHANGE=false
 - [Registration Worker and Mail Pool API](./registration-mail-pool-api.en.md)
 
 如果你要对接注册机或批量工作流，优先看邮箱池和外部接口文档。
+
+## 消息队列（Redis + RQ）
+
+用途：
+- 将“定时刷新 / 统一通知分发”等耗时任务从 Web 进程移到独立 worker，避免请求/进程卡顿。
+
+### 启动 Redis（示例）
+
+你可以用本机 Redis，或 Docker 方式启动（任选其一）。
+
+### 启动 worker
+
+PowerShell 示例：
+
+```powershell
+$env:REDIS_URL="redis://localhost:6379/0"
+$env:QUEUE_ENABLED="true"
+python worker.py
+```
+
+### 手动入队（返回 job_id）
+
+- `POST /api/jobs/enqueue/scheduled-refresh`
+- `POST /api/jobs/enqueue/notification-dispatch`
+
+查询状态：
+- `GET /api/jobs/<job_id>`
 
 ## 致谢
 

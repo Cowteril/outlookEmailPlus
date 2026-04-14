@@ -125,6 +125,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="hideAddAccountModal()">取消</button>
+                <button class="btn btn-primary" id="getRefreshTokenBtnInAdd" onclick="showGetRefreshTokenModal()">获取 Token</button>
                 <button class="btn btn-primary" onclick="addAccount()">导入</button>
             </div>
         </div>
@@ -243,7 +244,7 @@
     <div class="modal" id="settingsModal" onclick="if(event.target === this) hideSettingsModal()">
         <div class="modal-content" style="width: 400px;">
             <div class="modal-header">
-                <h3>⚙️ 系统设置</h3>
+                <h3>系统设置</h3>
                 <button class="modal-close" onclick="hideSettingsModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -258,84 +259,57 @@
 
     <!-- Token 刷新管理模态框 -->
     <div class="modal" id="refreshModal" onclick="if(event.target === this) hideRefreshModal()">
-        <div class="modal-content" style="width: 800px; max-width: 90vw;">
+        <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h3>🔄 Token 刷新管理</h3>
+                <h3>Token 刷新管理</h3>
                 <button class="modal-close" onclick="hideRefreshModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- 刷新统计 -->
-                <div
-                    style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                    <div
-                        style="font-size: 15px; font-weight: 600; margin-bottom: 16px; color: #333; display: flex; align-items: center; gap: 8px;">
-                        <span>📊</span>
-                        <span>刷新统计</span>
+                <div class="panel" style="margin-bottom: 1rem;">
+                    <div class="panel-header">
+                        <div class="panel-title"><span class="dot"></span> 刷新统计</div>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
-                        <div
-                            style="background-color: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                            <div
-                                style="font-size: 12px; color: #666; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
-                                <span>🕐</span>
-                                <span>上次全量刷新</span>
-                            </div>
-                            <div style="font-size: 13px; font-weight: 600; color: #333;" id="lastRefreshTime">-</div>
+                    <div class="kpi-grid">
+                        <div class="kpi">
+                            <div class="kpi-label">上次全量刷新</div>
+                            <div class="kpi-value" id="lastRefreshTime">-</div>
                         </div>
-                        <div
-                            style="background-color: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                            <div
-                                style="font-size: 12px; color: #666; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
-                                <span>📝</span>
-                                <span>总邮箱数</span>
-                            </div>
-                            <div style="font-size: 18px; font-weight: 700; color: #333;" id="totalRefreshCount">0</div>
+                        <div class="kpi">
+                            <div class="kpi-label">总邮箱数</div>
+                            <div class="kpi-value" id="totalRefreshCount">0</div>
                         </div>
-                        <div
-                            style="background-color: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                            <div
-                                style="font-size: 12px; color: #666; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
-                                <span>✅</span>
-                                <span>成功邮箱</span>
-                            </div>
-                            <div style="font-size: 18px; font-weight: 700; color: #28a745;" id="successRefreshCount">0
-                            </div>
+                        <div class="kpi">
+                            <div class="kpi-label">成功邮箱</div>
+                            <div class="kpi-value kpi-success" id="successRefreshCount">0</div>
                         </div>
-                        <div
-                            style="background-color: white; padding: 14px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
-                            <div
-                                style="font-size: 12px; color: #666; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
-                                <span>❌</span>
-                                <span>失败邮箱</span>
-                            </div>
-                            <div style="font-size: 18px; font-weight: 700; color: #dc3545;" id="failedRefreshCount">0
-                            </div>
+                        <div class="kpi">
+                            <div class="kpi-label">失败邮箱</div>
+                            <div class="kpi-value kpi-danger" id="failedRefreshCount">0</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 操作按钮 -->
-                <div
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px;">
+                <div class="action-grid" style="margin-bottom: 1rem;">
                     <button class="btn btn-primary" onclick="refreshAllAccounts()" id="refreshAllBtn">
-                        🔄 全量刷新
+                        全量刷新
                     </button>
                     <button class="btn btn-warning" onclick="retryFailedAccounts()" id="retryFailedBtn">
-                        🔁 重试失败
+                        重试失败
                     </button>
                     <button class="btn btn-secondary" onclick="loadFailedLogs()">
-                        ❌ 失败邮箱
+                        失败邮箱
                     </button>
                     <button class="btn btn-secondary" onclick="loadRefreshLogs()">
-                        📋 刷新历史
+                        刷新历史
                     </button>
                 </div>
 
                 <!-- 刷新进度 -->
-                <div id="refreshProgress"
-                    style="display: none; background-color: #e3f2fd; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #2196f3;">
-                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #1976d2;">正在刷新...</div>
-                    <div style="font-size: 13px; line-height: 1.8;" id="refreshProgressText">请稍候</div>
+                <div id="refreshProgress" class="notice" style="display: none; margin-bottom: 1rem;">
+                    <div class="notice-title">正在刷新…</div>
+                    <div id="refreshProgressText" style="font-size: 0.86rem; line-height: 1.65;">请稍候</div>
                 </div>
 
                 <!-- 失败邮箱列表 -->
@@ -345,24 +319,18 @@
                         <span>当前失败状态的邮箱</span>
                         <button class="btn btn-sm btn-secondary" onclick="hideFailedList()">隐藏</button>
                     </div>
-                    <div id="failedList"
-                        style="max-height: 300px; overflow-y: auto; border: 1px solid #e5e5e5; border-radius: 6px;">
+                    <div id="failedList" class="scroll-panel" style="max-height: 300px;">
                         <!-- 失败列表将通过 JS 动态加载 -->
                     </div>
                 </div>
 
                 <!-- 刷新历史 -->
                 <div id="refreshLogsContainer" style="display: none;">
-                    <div
-                        style="font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; padding: 10px; background-color: #f8f9fa; border-radius: 6px;">
-                        <span style="display: flex; align-items: center; gap: 6px;">
-                            <span>📋</span>
-                            <span>全量刷新历史</span>
-                        </span>
+                    <div class="panel-header" style="padding: 0.25rem 0; margin-bottom: 0.6rem;">
+                        <div class="panel-title"><span class="dot"></span> 全量刷新历史</div>
                         <button class="btn btn-sm btn-secondary" onclick="hideRefreshLogs()">隐藏</button>
                     </div>
-                    <div id="refreshLogsList"
-                        style="max-height: 400px; overflow-y: auto; border: 1px solid #e5e5e5; border-radius: 6px; background-color: white;">
+                    <div id="refreshLogsList" class="scroll-panel" style="max-height: 400px;">
                         <!-- 刷新历史将通过 JS 动态加载 -->
                     </div>
                 </div>
@@ -448,15 +416,16 @@
     </div>
     <!-- Error 详情模态框 -->
     <div class="modal" id="errorDetailModal" onclick="if(event.target === this) hideErrorDetailModal()">
-        <div class="modal-content" style="width: 700px; max-width: 90vw;">
-            <div class="modal-header" style="background-color: #fef0f0; border-bottom-color: #dc3545;">
-                <h3 style="color: #dc3545;">❌ 错误详情</h3>
+        <div class="modal-content modal-md">
+            <div class="modal-header modal-header--danger">
+                <h3>错误详情</h3>
                 <button class="modal-close" onclick="hideErrorDetailModal()">&times;</button>
             </div>
-            <div class="modal-body" style="padding-top: 16px;">
-                <div style="font-size: 14px; color: #dc3545; font-weight: 600; margin-bottom: 8px;">错误信息 (用户友好)</div>
-                <div class="error-message-box" id="errorModalUserMessage"
-                    style="background-color: #fff0f0; border: 1px solid #dc3545; color: #333; font-weight: 500;"></div>
+            <div class="modal-body" style="padding-top: 0.2rem;">
+                <div class="panel" style="margin-bottom: 1rem; border-color: rgba(180,35,24,0.18);">
+                    <div class="panel-title" style="margin-bottom: 0.55rem;"><span class="dot" style="background: var(--clr-danger); box-shadow: 0 0 0 3px rgba(180,35,24,0.10);"></span> 用户可读信息</div>
+                    <div class="error-message-box" id="errorModalUserMessage" style="font-weight: 600;"></div>
+                </div>
 
                 <div style="margin-top: 20px;">
                     <div style="font-size: 14px; color: #333; font-weight: 600; margin-bottom: 8px;">
@@ -470,16 +439,16 @@
                         </button>
                     </div>
 
-                    <div class="error-message-box" id="errorModalDetailsContainer"
+                    <div class="error-message-box scroll-panel" id="errorModalDetailsContainer"
                         style="height: 150px; display: none; padding: 0;">
                         <pre id="errorModalDetails"
-                            style="margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: #666;"></pre>
+                            style="margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-muted);"></pre>
                     </div>
                 </div>
 
                 <div style="margin-top: 20px;">
-                    <div style="font-size: 14px; color: #333; font-weight: 600; margin-bottom: 8px;">错误代码/类型</div>
-                    <div style="display: flex; gap: 16px; font-size: 13px; color: #666;">
+                    <div class="panel-title" style="margin-bottom: 0.55rem;"><span class="dot"></span> 错误元信息</div>
+                    <div style="display: flex; gap: 16px; font-size: 13px; color: var(--text-muted); flex-wrap: wrap;">
                         <div><strong>Code:</strong> <span id="errorModalCode"></span></div>
                         <div><strong>Type:</strong> <span id="errorModalType"></span></div>
                         <div><strong>Status:</strong> <span id="errorModalStatus"></span></div>
@@ -535,6 +504,65 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="hideRefreshErrorModal()">关闭</button>
                 <button class="btn btn-primary" id="editAccountFromErrorBtn">编辑账号</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 获取 Refresh Token 模态框 -->
+    <div class="modal" id="getRefreshTokenModal" onclick="if(event.target === this) hideGetRefreshTokenModal()">
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h3>获取 Refresh Token</h3>
+                <button class="modal-close" onclick="hideGetRefreshTokenModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">步骤 0: 输入当前系统登录密码</label>
+                    <input type="password" class="form-input" id="oauthVerifyPassword" placeholder="用于本系统二次验证，不是微软邮箱密码">
+                    <div class="form-hint">只有在返回 <code>refresh_token</code> 前才会使用这一步校验，避免敏感凭据被直接明文导出。</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">当前 OAuth 应用配置</label>
+                    <div class="action-grid" style="grid-template-columns: 1fr; gap: 0.5rem;">
+                        <input type="text" class="form-input" id="oauthClientIdInput" readonly style="font-family: var(--font-mono); font-size: 12px;">
+                        <input type="text" class="form-input" id="oauthRedirectUriInput" readonly style="font-family: var(--font-mono); font-size: 12px;">
+                    </div>
+                    <div class="form-hint">`client_id` 是 Azure / Microsoft OAuth 应用级配置，不是个人邮箱登录后自动生成。`refresh_token` 需要通过下面的微软授权流程换取。</div>
+                    <div class="form-hint" id="oauthRedirectUriWarning" style="display:none; color: #b45309;"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">步骤 1: 访问授权链接</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                        <input type="text" class="form-input" id="authUrlInput" readonly style="flex: 1; font-size: 12px; font-family: var(--font-mono);">
+                        <button class="btn btn-secondary" onclick="copyAuthUrl()" style="white-space: nowrap;">复制</button>
+                        <button class="btn btn-primary" onclick="openAuthUrl()" style="white-space: nowrap;">打开</button>
+                    </div>
+                    <div class="form-hint">点击“打开”后会跳到微软授权页。授权成功时，系统会优先自动接收回跳结果；如果浏览器拦截弹窗，再手工复制回跳地址。</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">步骤 2: 粘贴授权后的完整 URL</label>
+                    <textarea class="form-textarea" id="redirectUrlInput"
+                        placeholder="如果授权窗口没有自动回填，请把浏览器回跳后的完整 URL 粘贴到这里；也支持直接粘贴 ?code=... 这一段 query"
+                        style="height: 80px; font-size: 12px; font-family: var(--font-mono);"></textarea>
+                    <div class="form-hint">回跳 URL 必须和上面显示的 <code>redirect_uri</code> 一致，例如：<span id="oauthRedirectUriExample">http://localhost:8080/oauth/callback?code=xxxxx&state=12345</span></div>
+                </div>
+
+                <div class="form-group" id="refreshTokenResult" style="display: none;">
+                    <label class="form-label">✅ 账号信息（已获取成功）</label>
+                    <textarea class="form-textarea" id="refreshTokenOutput" readonly
+                        style="height: 100px; font-size: 12px; font-family: var(--font-mono); background-color: rgba(31,111,235,0.06); border-color: rgba(31,111,235,0.35);"></textarea>
+                    <div class="form-hint" style="color: var(--clr-accent);">
+                        <strong>格式说明：</strong>邮箱----密码----client_id----refresh_token<br>
+                        请将"your@outlook.com"和"yourpassword"替换为您的实际邮箱和密码，然后复制整行内容到"导入邮箱"中使用
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideGetRefreshTokenModal()">关闭</button>
+                <button class="btn btn-primary" id="exchangeTokenBtn" onclick="exchangeToken()">换取 Token</button>
             </div>
         </div>
     </div>

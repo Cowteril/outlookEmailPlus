@@ -132,17 +132,30 @@ def _configure_telegram_push_job(scheduler, app) -> None:
 
 def _configure_email_notification_job(scheduler, app) -> None:
     """注册/更新统一通知分发 Job。"""
-    from outlook_web.services.notification_dispatch import run_notification_dispatch_job
-
     try:
         scheduler.remove_job("email_notification_job")
     except Exception:
         pass
 
     interval = _get_notification_dispatch_interval(app)
+
+    def _dispatch_task():
+        # 优先入队；无队列配置时回退到进程内执行（兼容旧部署）
+        try:
+            from outlook_web.queueing import enqueue, is_queue_enabled
+
+            if is_queue_enabled():
+                enqueue("outlook_web.jobs.notification_dispatch_job", job_timeout=60 * 10)
+                return
+        except Exception:
+            pass
+
+        from outlook_web.services.notification_dispatch import run_notification_dispatch_job
+
+        run_notification_dispatch_job(app)
+
     scheduler.add_job(
-        func=run_notification_dispatch_job,
-        args=[app],
+        func=_dispatch_task,
         trigger="interval",
         seconds=interval,
         id="email_notification_job",
@@ -299,6 +312,16 @@ def configure_scheduler_jobs(scheduler, app, test_refresh_token) -> None:
 
     # 创建一个包含 app 和 test_refresh_token 的闭包
     def scheduled_task():
+        # 优先入队；无队列配置时回退到进程内执行（兼容旧部署）
+        try:
+            from outlook_web.queueing import enqueue, is_queue_enabled
+
+            if is_queue_enabled():
+                enqueue("outlook_web.jobs.scheduled_refresh_job", job_timeout=60 * 60 * 6)
+                return
+        except Exception:
+            pass
+
         scheduled_refresh_task(app, test_refresh_token)
 
     if use_cron:

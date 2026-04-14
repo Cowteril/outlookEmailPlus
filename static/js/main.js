@@ -406,7 +406,7 @@
             document.documentElement.dataset.theme = theme;
             localStorage.setItem('ol_theme', theme);
             const btn = document.getElementById('themeToggleBtn');
-            if (btn) btn.textContent = theme === 'dark' ? '☀ 浅色模式' : '☾ 深色模式';
+            if (btn) btn.textContent = theme === 'dark' ? '浅色模式' : '深色模式';
         }
 
         function toggleTheme() {
@@ -483,8 +483,8 @@
                     ` : `
                         ${switcherHtml}
                         <button class="btn-inline primary" onclick="showAddAccountModal()">＋ 添加账号</button>
-                        <button class="btn-inline ghost" onclick="showExportModal()">📤 导出</button>
-                        <button class="btn-inline ghost" onclick="showRefreshModal()">🔄 全量刷新 Token</button>
+                        <button class="btn-inline ghost" onclick="showExportModal()">导出</button>
+                        <button class="btn-inline ghost" onclick="showRefreshModal()">全量刷新 Token</button>
                     `;
                     actionsEl.classList.toggle('topbar-actions-compact', isCompactMode);
                     if (subtitleEl) {
@@ -2313,7 +2313,7 @@ ${details}
             } catch (e) {
                 showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('📨 发送测试消息'); }
+                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('发送测试消息'); }
             }
         }
 
@@ -2391,7 +2391,7 @@ ${details}
             } catch (e) {
                 showToast(`${translateAppTextLocal('请求失败')}: ${e.message}`, 'error');
             } finally {
-                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('📨 发送测试邮件'); }
+                if (btn) { btn.disabled = false; btn.textContent = translateAppTextLocal('发送测试邮件'); }
             }
         }
 
@@ -2718,6 +2718,297 @@ ${details}
             }
         }
 
+        // 开始轮询
+        function startPolling() {
+            if (isPolling || !currentAccount) {
+                console.log('[轮询] 无法启动: isPolling=', isPolling, ', currentAccount=', currentAccount);
+                return;
+            }
+
+            isPolling = true;
+            pollingCount = 0;
+            pollingErrorCount = 0; // 重置错误计数
+
+            // 初始化已知邮件ID集合
+            knownEmailIds = new Set(currentEmails.map(email => email.id));
+
+            console.log('[轮询] 已启动，间隔:', pollingInterval, '秒，最大次数:', maxPollingCount);
+
+            // 显示轮询状态指示器
+            showPollingStatusIndicator();
+
+            // 立即执行一次
+            pollForNewEmails();
+
+            // 设置定时器
+            pollingTimer = setInterval(pollForNewEmails, pollingInterval * 1000);
+        }
+
+        // 显示轮询状态指示器
+        function showPollingStatusIndicator() {
+            let indicator = document.getElementById('pollingStatusIndicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'pollingStatusIndicator';
+                indicator.style.cssText = `
+                    position: fixed;
+                    bottom: 24px;
+                    right: 24px;
+                    background-color: #28a745;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 500;
+                    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+                    z-index: 1000;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    cursor: pointer;
+                `;
+                indicator.innerHTML = `<span style="animation: pulse 1.5s infinite;">⟳</span> ${translateAppTextLocal('轮询中')}`;
+                indicator.onclick = () => {
+                    if (confirm('是否停止轮询？')) {
+                        stopPolling(false);
+                    }
+                };
+                document.body.appendChild(indicator);
+            }
+            indicator.style.display = 'flex';
+        }
+
+        // 隐藏轮询状态指示器
+        function hidePollingStatusIndicator() {
+            const indicator = document.getElementById('pollingStatusIndicator');
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+
+        // 停止轮询
+        function stopPolling(silent = false) {
+            console.log('[轮询] 停止轮询, silent=', silent);
+            if (pollingTimer) {
+                clearInterval(pollingTimer);
+                pollingTimer = null;
+            }
+            isPolling = false;
+            pollingCount = 0;
+            pollingErrorCount = 0;
+            hideNewEmailIndicator();
+            hideAccountNewEmailDot();
+            hidePollingStatusIndicator();
+            // 用户主动停止时显示提示
+            if (!silent) {
+                showToast(translateAppTextLocal('已停止轮询'), 'info');
+            }
+        }
+
+        // 轮询检查新邮件
+        let pollingErrorCount = 0; // 连续错误计数
+        const MAX_POLLING_ERRORS = 3; // 最大连续错误次数
+
+        async function pollForNewEmails() {
+            if (!currentAccount) {
+                stopPolling(true);
+                return;
+            }
+
+            pollingCount++;
+
+            try {
+                const response = await fetch(`/api/emails/${encodeURIComponent(currentAccount)}?skip=0&top=10&folder=${currentFolder}`);
+                const data = await response.json();
+
+                if (data.success && data.emails) {
+                    pollingErrorCount = 0; // 重置错误计数
+                    const newEmails = data.emails.filter(email => !knownEmailIds.has(email.id));
+
+                    if (newEmails.length > 0) {
+                        // 发现新邮件
+                        showNewEmailNotification(newEmails);
+
+                        // 更新已知邮件ID集合
+                        newEmails.forEach(email => knownEmailIds.add(email.id));
+
+                        // 更新邮件列表（在现有列表前面插入新邮件）
+                        currentEmails = [...newEmails, ...currentEmails];
+                        renderEmailList(currentEmails);
+                        document.getElementById('emailCount').textContent = `(${currentEmails.length})`;
+
+                        // 显示新邮件指示器（账号列表项红点）
+                        showAccountNewEmailDot(newEmails.length);
+                    }
+                } else {
+                    pollingErrorCount++;
+                }
+            } catch (error) {
+                console.error('轮询新邮件失败:', error);
+                pollingErrorCount++;
+            }
+
+            // 连续错误超过阈值，停止轮询并提示
+            if (pollingErrorCount >= MAX_POLLING_ERRORS) {
+                stopPolling(true);
+                showToast(translateAppTextLocal('轮询连续失败，已自动停止'), 'error');
+                return;
+            }
+
+            // 检查是否达到最大轮询次数（0 表示持续轮询，不检查次数）
+            if (maxPollingCount > 0 && pollingCount >= maxPollingCount) {
+                stopPolling(true);
+            }
+        }
+
+        // 显示新邮件通知（包含邮箱地址和邮件主题）
+        function showNewEmailNotification(newEmails) {
+            const count = newEmails.length;
+            const firstEmail = newEmails[0];
+            const subject = firstEmail?.subject || translateAppTextLocal('无主题');
+            const language = getUiLanguage();
+
+            // 请求浏览器通知权限
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const title = language === 'en'
+                    ? (count === 1 ? `New email - ${currentAccount}` : `New emails (${count}) - ${currentAccount}`)
+                    : (count === 1 ? `新邮件 - ${currentAccount}` : `新邮件 (${count}封) - ${currentAccount}`);
+                const body = language === 'en'
+                    ? (count === 1 ? subject : `${subject} and ${count} new emails`)
+                    : (count === 1 ? subject : `${subject} 等 ${count} 封新邮件`);
+                new Notification(title, {
+                    body: body,
+                    icon: '/img/ico.png'
+                });
+            } else if ('Notification' in window && Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+
+            // 显示页面内通知（包含邮箱和主题）
+            const message = language === 'en'
+                ? (count === 1 ? `📬 ${currentAccount}: ${subject}` : `📬 ${currentAccount}: ${subject} and ${count} new emails`)
+                : (count === 1 ? `📬 ${currentAccount}: ${subject}` : `📬 ${currentAccount}: ${subject} 等 ${count} 封新邮件`);
+            showToast(message, 'success');
+        }
+
+        // 显示账号列表项上的红点
+        function showAccountNewEmailDot(count) {
+            // 在当前选中的账号项上显示红点
+            const activeItem = document.querySelector('.account-card.active');
+            if (activeItem) {
+                let dot = activeItem.querySelector('.new-email-badge');
+                if (!dot) {
+                    dot = document.createElement('span');
+                    dot.className = 'new-email-badge';
+                    dot.style.cssText = `
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        background-color: #dc3545;
+                        color: white;
+                        padding: 2px 6px;
+                        border-radius: 10px;
+                        font-size: 11px;
+                        font-weight: 500;
+                        min-width: 18px;
+                        text-align: center;
+                    `;
+                    activeItem.style.position = 'relative';
+                    activeItem.appendChild(dot);
+                }
+                dot.textContent = count;
+                dot.style.display = 'block';
+            }
+
+            // 同时保留右上角指示器（作为备用）
+            showNewEmailIndicator(count);
+        }
+
+        // 隐藏账号列表项上的红点
+        function hideAccountNewEmailDot() {
+            const dots = document.querySelectorAll('.new-email-badge');
+            dots.forEach(dot => dot.style.display = 'none');
+        }
+
+        // 显示新邮件指示器（红点）- 移到右下角
+        function showNewEmailIndicator(count) {
+            let indicator = document.getElementById('newEmailIndicator');
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'newEmailIndicator';
+                indicator.style.cssText = `
+                    position: fixed;
+                    bottom: 70px;
+                    right: 24px;
+                    background-color: #dc3545;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+                    z-index: 1000;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    animation: slideIn 0.3s ease;
+                `;
+                indicator.innerHTML = `<span class="new-email-dot"></span> 新邮件 (${count})`;
+                indicator.onclick = () => {
+                    hideNewEmailIndicator();
+                    hideAccountNewEmailDot();
+                    // 滚动到邮件列表顶部
+                    document.getElementById('emailList').scrollTop = 0;
+                };
+                document.body.appendChild(indicator);
+
+                // 添加动画样式
+                if (!document.getElementById('newEmailIndicatorStyles')) {
+                    const style = document.createElement('style');
+                    style.id = 'newEmailIndicatorStyles';
+                    style.textContent = `
+                        @keyframes slideIn {
+                            from { transform: translateX(100%); opacity: 0; }
+                            to { transform: translateX(0); opacity: 1; }
+                        }
+                        .new-email-dot {
+                            width: 8px;
+                            height: 8px;
+                            background-color: white;
+                            border-radius: 50%;
+                            animation: pulse 1.5s infinite;
+                        }
+                        @keyframes pulse {
+                            0%, 100% { opacity: 1; }
+                            50% { opacity: 0.5; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+            } else {
+                indicator.innerHTML = `<span class="new-email-dot"></span> 新邮件 (${count})`;
+                indicator.style.display = 'flex';
+            }
+        }
+
+        // 隐藏新邮件指示器
+        function hideNewEmailIndicator() {
+            const indicator = document.getElementById('newEmailIndicator');
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+        }
+
+        // 切换轮询状态
+        function togglePolling() {
+            if (isPolling) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        }
+
         // ==================== 工具函数 ====================
 
         // 相对时间格式化
@@ -3025,22 +3316,27 @@ ${details}
                 return;
             }
 
-            let html = '';
-            failedList.forEach(item => {
-                html += `
-                    <div style="padding: 12px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: start;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(item.email)}</div>
-                            <div style="font-size: 12px; color: #dc3545;">${escapeHtml(item.error || '未知错误')}</div>
-                        </div>
-                        <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${item.id}, '${escapeHtml(item.email)}')">
-                            重试
-                        </button>
+            listEl.innerHTML = `
+                <div class="log-surface">
+                    <div class="log-list">
+                        ${failedList.map(item => `
+                            <div class="log-item">
+                                <div class="log-main">
+                                    <div class="log-title log-mono">${escapeHtml(item.email)}</div>
+                                    <div class="log-detail" style="border-color: rgba(180,35,24,0.18); color: var(--clr-danger);">
+                                        ${escapeHtml(item.error || '未知错误')}
+                                    </div>
+                                </div>
+                                <div class="log-badge">
+                                    <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${item.id}, '${escapeJs(item.email)}')">
+                                        重试
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-                `;
-            });
-
-            listEl.innerHTML = html;
+                </div>
+            `;
             container.style.display = 'block';
         }
 
@@ -3062,24 +3358,36 @@ ${details}
 
                 if (data.success) {
                     if (data.logs.length === 0) {
-                        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">暂无失败状态的邮箱</div>';
+                        listEl.innerHTML = '<div class="empty-state empty-state--compact"><span class="empty-icon">✓</span><p>暂无失败状态的邮箱</p></div>';
                     } else {
-                        let html = '';
-                        data.logs.forEach(log => {
-                            html += `
-                                <div style="padding: 12px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center;">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(log.account_email)}</div>
-                                        <div style="font-size: 12px; color: #dc3545;">${escapeHtml(log.error_message || '未知错误')}</div>
-                                        <div style="font-size: 11px; color: #999; margin-top: 4px;">最后刷新: ${formatDateTime(log.created_at)}</div>
-                                    </div>
-                                    <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${log.account_id}, '${escapeJs(log.account_email)}')">
-                                        重试
-                                    </button>
+                        listEl.innerHTML = `
+                            <div class="log-toolbar">
+                                <span>${translateAppTextLocal(`当前失败状态（共 ${data.logs.length} 条）`)}</span>
+                            </div>
+                            <div class="log-surface">
+                                <div class="log-list">
+                                    ${data.logs.map(log => `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-title log-mono">${escapeHtml(log.account_email)}</div>
+                                                <div class="log-sub">
+                                                    <span>${translateAppTextLocal('最后刷新')}:</span>
+                                                    <span>${formatDateTime(log.created_at)}</span>
+                                                </div>
+                                                <div class="log-detail" style="border-color: rgba(180,35,24,0.18); color: var(--clr-danger);">
+                                                    ${escapeHtml(log.error_message || translateAppTextLocal('未知错误'))}
+                                                </div>
+                                            </div>
+                                            <div class="log-badge">
+                                                <button class="btn btn-sm btn-primary" onclick="retrySingleAccount(${log.account_id}, '${escapeJs(log.account_email)}')">
+                                                    ${translateAppTextLocal('重试')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
-                            `;
-                        });
-                        listEl.innerHTML = html;
+                            </div>
+                        `;
                     }
                     container.style.display = 'block';
                 }
@@ -3099,34 +3407,39 @@ ${details}
 
                 if (data.success) {
                     if (data.logs.length === 0) {
-                        listEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #666;">暂无全量刷新历史</div>';
+                        listEl.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无全量刷新历史')}</p></div>`;
                     } else {
-                        listEl.innerHTML = `<div style="padding: 12px; background-color: #f8f9fa; border-bottom: 1px solid #e5e5e5; font-size: 13px; color: #666;">近半年刷新历史（共 ${data.logs.length} 条）</div>`;
-                        let html = '';
-                        data.logs.forEach(log => {
-                            const statusColor = log.status === 'success' ? '#28a745' : '#dc3545';
-                            const statusText = log.status === 'success' ? '成功' : '失败';
-                            const typeText = translateAppTextLocal(log.refresh_type === 'manual' ? '手动' : '自动');
-                            const typeColor = log.refresh_type === 'manual' ? '#007bff' : '#28a745';
-                            const typeBgColor = log.refresh_type === 'manual' ? '#e7f3ff' : '#e8f5e9';
-
-                            html += `
-                                <div style="padding: 14px; border-bottom: 1px solid #e5e5e5; transition: background-color 0.2s;"
-                                     onmouseover="this.style.backgroundColor='#f8f9fa'"
-                                     onmouseout="this.style.backgroundColor='transparent'">
-                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 6px;">
-                                        <div style="font-weight: 600; font-size: 14px;">${escapeHtml(log.account_email)}</div>
-                                        <div style="display: flex; gap: 8px; align-items: center;">
-                                            <span style="font-size: 11px; padding: 3px 8px; background-color: ${typeBgColor}; color: ${typeColor}; border-radius: 4px; font-weight: 500;">${typeText}</span>
-                                            <span style="font-size: 13px; color: ${statusColor}; font-weight: 600;">${statusText}</span>
-                                        </div>
-                                    </div>
-                                    <div style="font-size: 12px; color: #888;">${formatDateTime(log.created_at)}</div>
-                                    ${log.error_message ? `<div style="font-size: 12px; color: #dc3545; margin-top: 6px; padding: 6px; background-color: #fff5f5; border-radius: 4px;">${escapeHtml(log.error_message)}</div>` : ''}
+                        listEl.innerHTML = `
+                            <div class="log-toolbar">
+                                <span>${translateAppTextLocal(`近半年刷新历史（共 ${data.logs.length} 条）`)}</span>
+                            </div>
+                            <div class="log-surface">
+                                <div class="log-list">
+                                    ${data.logs.map(log => {
+                                        const isSuccess = log.status === 'success';
+                                        const statusText = isSuccess ? translateAppTextLocal('成功') : translateAppTextLocal('失败');
+                                        const statusClass = isSuccess ? 'badge-success' : 'badge-danger';
+                                        const typeText = translateAppTextLocal(log.refresh_type === 'manual' ? '手动' : '自动');
+                                        return `
+                                            <div class="log-item">
+                                                <div class="log-main">
+                                                    <div class="log-title log-mono">${escapeHtml(log.account_email)}</div>
+                                                    <div class="log-sub">
+                                                        <span>${formatDateTime(log.created_at)}</span>
+                                                        <span>·</span>
+                                                        <span>${escapeHtml(typeText)}</span>
+                                                    </div>
+                                                    ${log.error_message ? `<div class="log-detail">${escapeHtml(log.error_message)}</div>` : ''}
+                                                </div>
+                                                <div class="log-badge">
+                                                    <span class="badge badge-solid ${statusClass}">${statusText}</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
                                 </div>
-                            `;
-                        });
-                        listEl.innerHTML += html;
+                            </div>
+                        `;
                     }
                     container.style.display = 'block';
                 }
@@ -3152,37 +3465,48 @@ ${details}
                 const data = await response.json();
 
                 if (data.success && data.logs && data.logs.length > 0) {
+                    const countText =
+                        getUiLanguage() === 'en'
+                            ? `Total ${data.logs.length} records`
+                            : `共 ${data.logs.length} 条记录`;
                     container.innerHTML = `
-                        <div style="padding:0.6rem 1rem;font-size:0.78rem;color:var(--text-muted);border-bottom:1px solid var(--border-light);">
-                            ${translateAppTextLocal(`共 ${data.logs.length} 条记录`)}
+                        <div class="log-toolbar">
+                            <span>${escapeHtml(countText)}</span>
                         </div>
-                        <div class="dashboard-list-wrap">
-                            ${data.logs.map(log => {
-                                const isSuccess = log.status === 'success';
-                                const statusBadge = isSuccess
-                                    ? `<span class="badge" style="background:var(--clr-jade);color:white;">${translateAppTextLocal('成功')}</span>`
-                                    : `<span class="badge" style="background:var(--clr-danger);color:white;">${translateAppTextLocal('失败')}</span>`;
-                                const typeText = translateAppTextLocal(
-                                    log.refresh_type === 'manual' ? '手动' : (log.refresh_type === 'scheduled' ? '定时' : (log.refresh_type || '-'))
-                                );
-                                return `
-                                    <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:0.8rem;">
-                                        <div style="flex:1;min-width:0;">
-                                            <div style="font-weight:600;font-size:0.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(log.account_email || '-')}</div>
-                                            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${formatDateTime(log.created_at)} · ${escapeHtml(typeText)}</div>
-                                            ${log.error_message ? `<div style="font-size:0.72rem;color:var(--clr-danger);margin-top:4px;padding:4px 8px;background:rgba(185,28,28,0.06);border-radius:4px;">${escapeHtml(log.error_message)}</div>` : ''}
+                        <div class="log-surface">
+                            <div class="log-list">
+                                ${data.logs.map(log => {
+                                    const isSuccess = log.status === 'success';
+                                    const statusText = isSuccess ? translateAppTextLocal('成功') : translateAppTextLocal('失败');
+                                    const statusClass = isSuccess ? 'badge-success' : 'badge-danger';
+                                    const typeText = translateAppTextLocal(
+                                        log.refresh_type === 'manual' ? '手动' : (log.refresh_type === 'scheduled' ? '定时' : (log.refresh_type || '-'))
+                                    );
+                                    return `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-title log-mono">${escapeHtml(log.account_email || '-')}</div>
+                                                <div class="log-sub">
+                                                    <span>${formatDateTime(log.created_at)}</span>
+                                                    <span>·</span>
+                                                    <span>${escapeHtml(typeText)}</span>
+                                                </div>
+                                                ${log.error_message ? `<div class="log-detail">${escapeHtml(log.error_message)}</div>` : ''}
+                                            </div>
+                                            <div class="log-badge">
+                                                <span class="badge badge-solid ${statusClass}">${statusText}</span>
+                                            </div>
                                         </div>
-                                        ${statusBadge}
-                                    </div>
-                                `;
-                            }).join('')}
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `<div class="empty-state"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无刷新记录')}</p></div>`;
+                    container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无刷新记录')}</p></div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载刷新历史失败')}</p></div>`;
+                container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载刷新历史失败')}</p></div>`;
             }
         }
 
@@ -3238,36 +3562,47 @@ ${details}
                 const data = await response.json();
 
                 if (data.success && data.logs && data.logs.length > 0) {
+                    const totalCount = data.total || data.logs.length;
+                    const countText = getUiLanguage() === 'en' ? `Total ${totalCount} records` : `共 ${totalCount} 条记录`;
                     container.innerHTML = `
-                        <div style="padding:0.6rem 1rem;font-size:0.78rem;color:var(--text-muted);border-bottom:1px solid var(--border-light);">
-                            ${translateAppTextLocal(`共 ${data.total || data.logs.length} 条记录`)}
+                        <div class="log-toolbar">
+                            <span>${escapeHtml(countText)}</span>
                         </div>
-                        <div class="dashboard-list-wrap">
-                            ${data.logs.map(log => {
-                                const actionColor = log.action === 'delete' ? 'var(--clr-danger)' : (log.action === 'create' ? 'var(--clr-jade)' : 'var(--clr-primary)');
-                                const actionLabel = translateAppTextLocal(log.action || '-');
-                                const resourceTypeLabel = translateAppTextLocal(log.resource_type || '-');
-                                const detailText = formatAuditDetailText(log.details);
-                                return `
-                                    <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--border-light);">
-                                        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:4px;">
-                                            <span class="badge" style="background:${actionColor};color:white;font-size:0.68rem;">${escapeHtml(actionLabel)}</span>
-                                            <span style="font-size:0.78rem;color:var(--text-muted);">${escapeHtml(resourceTypeLabel)}</span>
-                                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${formatDateTime(log.created_at)}</span>
+                        <div class="log-surface">
+                            <div class="log-list">
+                                ${data.logs.map(log => {
+                                    const actionLabel = translateAppTextLocal(log.action || '-');
+                                    const resourceTypeLabel = translateAppTextLocal(log.resource_type || '-');
+                                    const detailText = formatAuditDetailText(log.details);
+                                    const actionClass = log.action === 'delete'
+                                        ? 'badge-danger'
+                                        : (log.action === 'create' ? 'badge-success' : 'badge-action');
+                                    return `
+                                        <div class="log-item">
+                                            <div class="log-main">
+                                                <div class="log-sub" style="margin-top: 0;">
+                                                    <span class="badge badge-solid ${actionClass}">${escapeHtml(actionLabel)}</span>
+                                                    <span>${escapeHtml(resourceTypeLabel)}</span>
+                                                    <span style="margin-left:auto;">${formatDateTime(log.created_at)}</span>
+                                                </div>
+                                                <div class="log-title log-mono" style="margin-top: 0.35rem;">${escapeHtml(log.resource_id || '-')}</div>
+                                                ${detailText ? `<div class="log-detail">${escapeHtml(detailText).substring(0, 200)}</div>` : ''}
+                                                <div class="log-sub">
+                                                    <span>IP: ${escapeHtml(log.user_ip || '-')}</span>
+                                                    ${log.trace_id ? `<span>·</span><span class="log-mono">trace: ${escapeHtml(log.trace_id)}</span>` : ''}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div style="font-size:0.82rem;color:var(--text);">${escapeHtml(log.resource_id || '-')}</div>
-                                        ${detailText ? `<div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px;word-break:break-all;">${escapeHtml(detailText).substring(0, 200)}</div>` : ''}
-                                        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px;">IP: ${escapeHtml(log.user_ip || '-')} ${log.trace_id ? '· trace: ' + escapeHtml(log.trace_id) : ''}</div>
-                                    </div>
-                                `;
-                            }).join('')}
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     `;
                 } else {
-                    container.innerHTML = `<div class="empty-state"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无审计记录')}</p></div>`;
+                    container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">📭</span><p>${translateAppTextLocal('暂无审计记录')}</p></div>`;
                 }
             } catch (error) {
-                container.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载审计日志失败')}</p></div>`;
+                container.innerHTML = `<div class="empty-state empty-state--compact"><span class="empty-icon">⚠️</span><p>${translateAppTextLocal('加载审计日志失败')}</p></div>`;
             }
         }
 

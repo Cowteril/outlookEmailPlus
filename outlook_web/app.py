@@ -36,6 +36,8 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
             external_pool,
             external_temp_emails,
             groups,
+            jobs,
+            oauth,
             pages,
             scheduler,
             settings,
@@ -144,6 +146,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_blueprint(temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(settings.create_blueprint())
         app.register_blueprint(scheduler.create_blueprint())
+        app.register_blueprint(jobs.create_blueprint())
         app.register_blueprint(system.create_blueprint())
         app.register_blueprint(audit.create_blueprint())
         app.register_blueprint(external_pool.create_blueprint(csrf_exempt=csrf_exempt))

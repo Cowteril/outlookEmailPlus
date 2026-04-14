@@ -63,6 +63,21 @@ def get_scheduler_autostart_default() -> bool:
     return env_true("SCHEDULER_AUTOSTART", True)
 
 
+def get_redis_url() -> str:
+    return _getenv("REDIS_URL", "") or ""
+
+
+def get_queue_name() -> str:
+    return _getenv("QUEUE_NAME", "outlook-email-plus") or "outlook-email-plus"
+
+
+def get_queue_enabled() -> bool:
+    # 默认：未配置 Redis 时不启用队列；配置了 REDIS_URL 时默认启用。
+    if get_redis_url():
+        return env_true("QUEUE_ENABLED", True)
+    return env_true("QUEUE_ENABLED", False)
+
+
 def get_trusted_proxies() -> list[str]:
     """
     获取受信任的代理 IP 列表。
