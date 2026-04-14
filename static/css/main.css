@@ -1270,7 +1270,139 @@ textarea.form-input {
   to   { transform: translateX(0);    opacity: 1; }
 }
 
-/* ===== Modal ===== */
+/* ===== Source Domain Map ===== */
+.word-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1.15;
+  padding: 8px;
+  border: 1px dashed var(--border-light);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: visible;
+}
+
+.word-cloud-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transform-origin: center;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+}
+
+.word-cloud-item:hover {
+  background: rgba(184, 92, 56, 0.06);
+  border-color: rgba(184, 92, 56, 0.18);
+  transform: translateY(-1px) scale(1.02);
+}
+
+.word-cloud-item .wc-count {
+  font-size: 0.72em;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  padding: 0 0.35em;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+}
+
+.wc-tooltip {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 10px 30px var(--shadow);
+  font-size: 0.82rem;
+}
+
+.wc-tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-theme="dark"] .word-cloud-item {
+  background: rgba(184, 92, 56, 0.12);
+  border-color: rgba(184, 92, 56, 0.22);
+}
+
+.source-map-graph .sm-graph {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 12px;
+}
+
+.source-map-graph .sm-graph-col {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--bg);
+  min-height: 120px;
+}
+
+.source-map-graph .sm-graph-col-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.source-map-graph .sm-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.source-map-graph .sm-node-badge {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.source-map-graph .sm-edges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-map-graph .sm-edge {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.source-map-graph .sm-edge-mid { color: var(--text-muted); }
+.source-map-graph .sm-edge-count { color: var(--text-muted); }
+
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.45);
   display: flex; align-items: center; justify-content: center;

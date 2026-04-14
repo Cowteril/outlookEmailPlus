@@ -451,6 +451,7 @@
                 scheduleAccountPanelDensitySync();
             }
             if (page === 'temp-emails' && typeof loadTempEmails === 'function') loadTempEmails(true);
+            if (page === 'source-map' && typeof initSourceMapPage === 'function') initSourceMapPage();
             if (page === 'settings') loadSettings();
             if (page === 'refresh-log') loadRefreshLogPage();
             if (page === 'audit') loadAuditLogPage();
@@ -467,7 +468,8 @@
                 'temp-emails': ['临时邮箱', '创建和管理临时邮箱'],
                 'refresh-log': ['刷新日志', 'Token 刷新历史记录'],
                 'settings': ['系统设置', '配置系统参数'],
-                'audit': ['审计日志', '系统操作记录']
+                'audit': ['审计日志', '系统操作记录'],
+                'source-map': ['来源分布', '分析账号注册平台来源']
             };
             const t = titles[page] || [page, ''];
             if (titleEl) titleEl.textContent = translateAppTextLocal(t[0]);

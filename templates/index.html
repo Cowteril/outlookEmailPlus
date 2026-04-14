@@ -73,6 +73,18 @@
                     <span>刷新日志</span>
                 </button>
 
+                <div class="nav-section">分析</div>
+                <button class="nav-item" data-page="source-map" onclick="navigate('source-map')">
+                    <span class="nav-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false">
+                            <path d="M4 19V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            <path d="M4 19h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            <path d="M7 15l4-4 3 3 5-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <span>来源分布</span>
+                </button>
+
                 <div class="nav-section">系统</div>
                 <button class="nav-item" data-page="settings" onclick="navigate('settings')">
                     <span class="nav-icon" aria-hidden="true">
@@ -182,6 +194,68 @@
                                 <li><span class="loading-overlay"><span class="spinner"></span> 加载中…</span></li>
                             </ul>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== Page: Source Domain Map ===== -->
+            <div class="page page-hidden" id="page-source-map">
+                <div class="card" style="margin-bottom:12px;">
+                    <div class="card-header">
+                        <div class="card-title">邮件来源分布图 (Source Domain Map)</div>
+                    </div>
+                    <div class="card-body">
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;">
+                            <div style="min-width:240px;">
+                                <label style="display:block;color:var(--text-muted);font-size:0.78rem;margin-bottom:6px;">邮箱账号（可选）</label>
+                                <select id="sourceMapAccountSelect" class="input" style="width:100%;max-width:360px;"></select>
+                            </div>
+                            <div style="min-width:160px;">
+                                <label style="display:block;color:var(--text-muted);font-size:0.78rem;margin-bottom:6px;">统计窗口</label>
+                                <select id="sourceMapWindowSelect" class="input" style="width:100%;max-width:220px;">
+                                    <option value="30d">近 30 天</option>
+                                    <option value="90d">近 90 天</option>
+                                    <option value="all">全部</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-primary" onclick="loadSourceMap()">刷新</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:10px;color:var(--text-muted);font-size:0.8rem;">
+                            说明：当前为最小可用版（不引入第三方图表库）。词云用“标签云”方式呈现；关系图用简化连线示意。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid" style="grid-template-columns:1.2fr 1fr;">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">词云图（按发件人域名）</div>
+                        </div>
+                        <div class="card-body">
+                            <div id="sourceMapWordCloud" class="word-cloud" style="min-height:220px;"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Top 域名</div>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <ul class="dashboard-list" id="sourceMapTopDomains">
+                                <li style="color:var(--text-muted);padding:1rem;">点击“刷新”加载数据</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:12px;">
+                    <div class="card-header">
+                        <div class="card-title">关系图（账号 ↔ 高频域名）</div>
+                    </div>
+                    <div class="card-body">
+                        <div id="sourceMapGraph" class="source-map-graph"></div>
                     </div>
                 </div>
             </div>
