@@ -3953,6 +3953,10 @@ ${details}
                 if (data.result === 'processing') {
                     // 刚开始处理该账号
                     updatePersistentToast(toastId, `🔄 正在刷新 Token... ${data.current - 1} / ${data.total}`);
+                    // 更新对应账号卡片状态为处理中
+                    if (data.account_id) {
+                        updateAccountCardRefreshStatus(data.account_id, 'processing', null, null);
+                    }
                 } else {
                     // 该账号刷新完成（success 或 failed）
                     updatePersistentToast(toastId, `🔄 正在刷新 Token... ${data.current} / ${data.total}`);
@@ -3993,6 +3997,208 @@ ${details}
             }
         }
 
+        // 手动刷新单个账号的 token
+        function refreshAccountToken(accountId, email) {
+            // 先更新状态为处理中
+            updateAccountCardRefreshStatus(accountId, 'processing', null, null);
+            
+            // 发送刷新请求
+            fetch(`/api/accounts/${accountId}/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 刷新成功
+                    updateAccountCardRefreshStatus(accountId, 'success', new Date().toISOString(), null);
+                    showToast(`✅ ${email} Token 刷新成功`, 'success');
+                    
+                    // 记录刷新历史到本地存储
+                    recordRefreshHistory(accountId, 'success', '刷新成功');
+                    
+                    // 刷新账号列表以更新状态
+                    if (currentGroupId) {
+                        loadAccountsByGroup(currentGroupId, true);
+                    }
+                } else {
+                    // 刷新失败
+                    const errorMessage = data.error ? (data.error.message || data.error.message_en || '刷新失败') : '刷新失败';
+                    updateAccountCardRefreshStatus(accountId, 'failed', null, errorMessage);
+                    showToast(`❌ ${email} Token 刷新失败: ${errorMessage}`, 'error');
+                    
+                    // 记录刷新历史到本地存储
+                    recordRefreshHistory(accountId, 'failed', errorMessage);
+                    
+                    // 刷新账号列表以更新token状态
+                    if (currentGroupId) {
+                        loadAccountsByGroup(currentGroupId, true);
+                    }
+                }
+            })
+            .catch(error => {
+                // 网络错误
+                updateAccountCardRefreshStatus(accountId, 'failed', null, '网络错误');
+                showToast(`❌ ${email} Token 刷新失败: 网络错误`, 'error');
+                
+                // 记录刷新历史到本地存储
+                recordRefreshHistory(accountId, 'failed', '网络错误');
+                
+                // 刷新账号列表以更新token状态
+                if (currentGroupId) {
+                    loadAccountsByGroup(currentGroupId, true);
+                }
+            });
+        }
+        
+        // 记录刷新历史到本地存储
+        function recordRefreshHistory(accountId, status, message) {
+            try {
+                // 获取现有历史记录
+                const historyKey = `refresh_history_${accountId}`;
+                const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+                
+                // 添加新记录
+                const newRecord = {
+                    id: Date.now().toString(),
+                    status: status,
+                    message: message,
+                    created_at: new Date().toISOString()
+                };
+                
+                // 限制历史记录数量为50条
+                const updatedHistory = [newRecord, ...existingHistory].slice(0, 50);
+                
+                // 保存回本地存储
+                localStorage.setItem(historyKey, JSON.stringify(updatedHistory));
+            } catch (error) {
+                console.error('Error recording refresh history:', error);
+            }
+        }
+        
+        // 从本地存储获取刷新历史
+        function getLocalRefreshHistory(accountId) {
+            try {
+                const historyKey = `refresh_history_${accountId}`;
+                return JSON.parse(localStorage.getItem(historyKey) || '[]');
+            } catch (error) {
+                console.error('Error getting local refresh history:', error);
+                return [];
+            }
+        }
+
+        // 显示刷新历史记录
+        function showRefreshHistory(accountId, email) {
+            // 创建模态框
+            const modal = document.createElement('div');
+            modal.className = 'modal fade show';
+            modal.style.display = 'block';
+            modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${email} - ${translateAppTextLocal('刷新历史')}</h5>
+                            <button type="button" class="close" onclick="this.closest('.modal').remove()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="refresh-history-container">
+                                <div class="loading">${translateAppTextLocal('加载中...')}</div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">${translateAppTextLocal('关闭')}</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加到文档
+            document.body.appendChild(modal);
+            document.body.style.overflow = 'hidden';
+            
+            // 加载刷新历史
+            fetch(`/api/accounts/${accountId}/refresh-history`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Refresh history data:', data);
+                    const container = modal.querySelector('.refresh-history-container');
+                    
+                    // 获取本地存储的历史记录
+                    const localHistory = getLocalRefreshHistory(accountId);
+                    
+                    // 合并后端和本地的历史记录
+                    let combinedHistory = [];
+                    if (data.success && data.data && data.data.length > 0) {
+                        combinedHistory = [...data.data];
+                    }
+                    
+                    // 添加本地历史记录，避免重复
+                    localHistory.forEach(localItem => {
+                        const isDuplicate = combinedHistory.some(item => item.id === localItem.id || item.created_at === localItem.created_at);
+                        if (!isDuplicate) {
+                            combinedHistory.push(localItem);
+                        }
+                    });
+                    
+                    // 按时间倒序排序
+                    combinedHistory.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    
+                    if (combinedHistory.length > 0) {
+                        const historyHtml = combinedHistory.map(item => {
+                            const statusClass = item.status === 'success' ? 'success' : 'danger';
+                            const statusIcon = item.status === 'success' ? '✅' : '❌';
+                            return `
+                                <div class="refresh-history-item">
+                                    <div class="refresh-history-status ${statusClass}">${statusIcon}</div>
+                                    <div class="refresh-history-time">${new Date(item.created_at).toLocaleString()}</div>
+                                    <div class="refresh-history-message">${item.message || (item.status === 'success' ? '刷新成功' : '刷新失败')}</div>
+                                </div>
+                            `;
+                        }).join('');
+                        container.innerHTML = `<div class="refresh-history-list">${historyHtml}</div>`;
+                    } else {
+                        container.innerHTML = `<div class="no-history">${translateAppTextLocal('暂无刷新历史')}</div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading refresh history:', error);
+                    const container = modal.querySelector('.refresh-history-container');
+                    
+                    // 当后端加载失败时，使用本地存储的历史记录
+                    const localHistory = getLocalRefreshHistory(accountId);
+                    if (localHistory.length > 0) {
+                        // 按时间倒序排序
+                        localHistory.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                        
+                        const historyHtml = localHistory.map(item => {
+                            const statusClass = item.status === 'success' ? 'success' : 'danger';
+                            const statusIcon = item.status === 'success' ? '✅' : '❌';
+                            return `
+                                <div class="refresh-history-item">
+                                    <div class="refresh-history-status ${statusClass}">${statusIcon}</div>
+                                    <div class="refresh-history-time">${new Date(item.created_at).toLocaleString()}</div>
+                                    <div class="refresh-history-message">${item.message || (item.status === 'success' ? '刷新成功' : '刷新失败')}</div>
+                                </div>
+                            `;
+                        }).join('');
+                        container.innerHTML = `<div class="refresh-history-list">${historyHtml}</div>`;
+                    } else {
+                        container.innerHTML = `<div class="error">${translateAppTextLocal('加载失败')}</div>`;
+                    }
+                });
+            
+            // 添加关闭事件
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                    document.body.style.overflow = '';
+                }
+            });
+        }
+
         // 更新账号卡片的刷新状态显示
         function updateAccountCardRefreshStatus(accountId, result, lastRefreshAt, errorMessage) {
             // 标准视图：查找 data-account-id 匹配的卡片
@@ -4001,8 +4207,26 @@ ${details}
                 // 更新刷新状态徽章（如果存在）
                 const refreshBadge = card.querySelector('.refresh-status-badge, [data-refresh-status]');
                 if (refreshBadge) {
-                    refreshBadge.textContent = result === 'success' ? '✅' : '❌';
-                    refreshBadge.title = result === 'success' ? '刷新成功' : (errorMessage || '刷新失败');
+                    let status = 'idle';
+                    let icon = '⏸';
+                    let title = '刷新状态';
+                    
+                    if (result === 'processing') {
+                        status = 'processing';
+                        icon = '🔄';
+                        title = '正在刷新...';
+                    } else if (result === 'success') {
+                        status = 'success';
+                        icon = '✅';
+                        title = '刷新成功';
+                    } else if (result === 'failed') {
+                        status = 'failed';
+                        icon = '❌';
+                        title = errorMessage || '刷新失败';
+                    }
+                    
+                    refreshBadge.textContent = icon;
+                    refreshBadge.dataset.refreshStatus = status;
                 }
                 // 更新最后刷新时间（如果存在）
                 if (lastRefreshAt) {
