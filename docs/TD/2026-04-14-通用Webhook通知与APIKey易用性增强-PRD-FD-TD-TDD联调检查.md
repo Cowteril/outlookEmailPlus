@@ -3,9 +3,9 @@
 > 检查日期：2026-04-14  
 > 对照文档：
 > - PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（v1.5，路径待补）
-> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.7）
-> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.7）
-> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.6）
+> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.8）
+> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.8）
+> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.7）
 
 ---
 
@@ -138,6 +138,13 @@
 - 失败根因：`black --check` 未通过。
 - 已执行修复：`black` + `isort` + 双 check 均通过。
 - 修复后分批全量回归再次通过：`346 + 89 + 231 + 492 = 1158`（`skipped=7`）。
+
+### 4.10 v1.17.0 发布确认与监控收口（2026-04-15）
+
+- 发布状态：`v1.17.0` 已在 GitHub Releases 发布并标记为 `Latest`。
+- 发布链接：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
+- 修复提交 `f3d2208` 对应主链路工作流已全绿（Code Quality / Python Tests / Build and Push Docker Image / SonarCloud）。
+- 监控收口提交 `05871bf` 触发的 SonarCloud（run `24450875717`）同样为 success。
 
 ---
 

@@ -1,11 +1,11 @@
 # TODO: 通用 Webhook 通知与 API Key 易用性增强
 
 > 创建日期：2026-04-14  
-> 更新日期：2026-04-15（v1.9 — 回填发布后质量门禁修复执行）  
+> 更新日期：2026-04-15（v1.10 — 回填 v1.17.0 发布确认与监控收口）  
 > 基于 PRD v1.5：`docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）  
-> 基于 FD v1.7：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
-> 基于 TD v1.7：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
-> 基于 TDD v1.6：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
+> 基于 FD v1.8：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
+> 基于 TD v1.8：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
+> 基于 TDD v1.7：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
 > 联调检查：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强-PRD-FD-TD-TDD联调检查.md`  
 > AI 执行提示词：按会话实时提供（不落库文档）  
 > 目标版本：v1.17.x（待排期）
@@ -119,6 +119,17 @@
   - `test_[m-r]*` → **Ran 231, OK (skipped=7)**
   - `test_[s-z]*` → **Ran 492, OK**
 - 汇总：**1158 tests 通过，skipped=7**。
+
+### 本次执行回填（2026-04-15，发布确认与监控收口）
+
+- 发布确认：`v1.17.0` 已在 GitHub Release 正式发布并显示为 `Latest`。
+- 发布页：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
+- 修复提交链路（`f3d2208`）最终状态：
+  - `Code Quality` ✅
+  - `Python Tests` ✅
+  - `Build and Push Docker Image` ✅
+  - `SonarCloud Scan` ✅
+- 文档收口提交链路（`05871bf`）附加监控：`SonarCloud Scan`（run `24450875717`）✅
 
 ---
 

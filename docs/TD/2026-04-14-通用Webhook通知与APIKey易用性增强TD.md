@@ -1,8 +1,8 @@
 # TD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.7
+- 文档版本: v1.8
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.7 — 回填发布后格式化门禁修复与回归）
+- 更新日期: 2026-04-15（v1.8 — 回填 v1.17.0 发布状态核对与监控收口）
 - 文档类型: 技术细节设计
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -569,3 +569,17 @@ const key = Array.from(bytes, b => ALPHABET[b % ALPHABET.length]).join('');
    - `test_[m-r]*` → Ran 231, OK (skipped=7)
    - `test_[s-z]*` → Ran 492, OK
    - 汇总：**1158 tests 通过，skipped=7**。
+
+### 10.7 v1.17.0 发布状态核对（2026-04-15）
+
+1. Release 结果：
+   - `v1.17.0` 已发布且为 `Latest`；
+   - 非草稿、非预发布；
+   - 发布页：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`。
+2. 发布后修复链路结果（提交 `f3d2208`）：
+   - `Code Quality` ✅
+   - `Python Tests` ✅
+   - `Build and Push Docker Image` ✅
+   - `SonarCloud Scan` ✅
+3. 额外监控收口：
+   - 文档收口提交 `05871bf` 触发的新一轮 `SonarCloud Scan`（run `24450875717`）已完成 `success`。

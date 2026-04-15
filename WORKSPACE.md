@@ -113,6 +113,37 @@
    - 本次为监控收口回传，不涉及新增代码实现。
    - WORKSPACE 已按会话要求持续记录至当前最终状态。
 
+#### 71. v1.17.0 发布状态核对（Latest）与监控闭环确认
+
+**时间**：2026-04-15
+
+**本次操作**：
+
+1. 发布状态核对
+   - 执行：`gh release view v1.17.0 --json ...`
+   - 结果：
+     - `isDraft=false`
+     - `isPrerelease=false`
+     - `name/tag=v1.17.0`
+     - `publishedAt=2026-04-15T10:29:25Z`
+     - 发布页：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
+   - `gh release list` 核对：`v1.17.0` 为 `Latest`。
+
+2. 监控收口状态补充
+   - 文档收口提交 `05871bf` 触发的 `SonarCloud Scan`（run `24450875717`）已 `completed/success`。
+   - 至此本会话发布推进链路（发布 + 修复 + 二次监控）完成闭环。
+
+3. 文档回填
+   - 已同步更新：
+     - `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.8）
+     - `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.8）
+     - `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.7）
+     - `docs/TODO/2026-04-14-通用Webhook通知与APIKey易用性增强TODO.md`（v1.10）
+     - `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强-PRD-FD-TD-TDD联调检查.md`
+
+4. 现场状态
+   - 本次以状态核对和文档回填为主，无新增业务实现。
+
 #### 66. v1.17.0 发布执行（单提交策略）与 CI/CD 实时结果回填
 
 **时间**：2026-04-15

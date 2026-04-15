@@ -1,8 +1,8 @@
 # TDD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.6
+- 文档版本: v1.7
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.6 — 回填发布后格式化修复与分批回归）
+- 更新日期: 2026-04-15（v1.7 — 回填 v1.17.0 发布确认与监控收口）
 - 文档类型: 测试设计文档（TDD）
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -370,3 +370,11 @@ python -m unittest discover -s tests -v
   - `test_[m-r]*` → **Ran 231, OK (skipped=7)**
   - `test_[s-z]*` → **Ran 492, OK**
 - 汇总：**1158 tests 通过，skipped=7**（修复前后结果一致）。
+
+### 13.11 v1.17.0 发布与链路收口确认（2026-04-15）
+
+- 发布状态：`v1.17.0` Release 已发布并标记为 `Latest`。
+- 发布页面：`https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`。
+- 发布后修复链路（提交 `f3d2208`）已验证四项主工作流全绿：
+  - `Code Quality` / `Python Tests` / `Build and Push Docker Image` / `SonarCloud Scan` 均为 success。
+- 会话监控收口提交（`05871bf`）触发的 `SonarCloud Scan` 亦为 success，说明当前主干状态稳定。
