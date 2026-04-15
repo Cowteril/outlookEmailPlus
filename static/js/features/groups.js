@@ -286,20 +286,23 @@
 
                 let tokenBadge = `<span class="badge badge-gray">IMAP</span>`;
                 if (supportsTokenRefresh) {
-                    tokenBadge = `<span class="badge badge-gray">– ${translateAppTextLocal('未知')}</span>`;
+                    tokenBadge = `<span class="badge badge-gray">❓ ${translateAppTextLocal('未知')}</span>`;
                     if (acc.token_status === 'valid') {
-                        tokenBadge = `<span class="badge badge-green">✓ ${translateAppTextLocal('有效')}</span>`;
+                        tokenBadge = `<span class="badge badge-green">✅ ${translateAppTextLocal('有效')}</span>`;
                     } else if (acc.token_status === 'invalid' || acc.token_status === 'expired') {
-                        tokenBadge = `<span class="badge badge-red">✗ ${translateAppTextLocal('过期')}</span>`;
+                        tokenBadge = `<span class="badge badge-red">❌ ${translateAppTextLocal('过期')}</span>`;
                     } else if (acc.token_status === 'expiring') {
-                        tokenBadge = `<span class="badge badge-gold">⚠ ${translateAppTextLocal('即将过期')}</span>`;
+                        tokenBadge = `<span class="badge badge-gold">⚠️ ${translateAppTextLocal('即将过期')}</span>`;
+                    } else if (acc.last_refresh_status === 'failed') {
+                        tokenBadge = `<span class="badge badge-red">❌ ${translateAppTextLocal('失败')}</span>`;
                     }
                 }
 
                 return `
-                <div class="account-card ${currentAccount === acc.email ? 'active' : ''}"
+                <div class="account-card ${currentAccount === acc.email ? 'active' : ''}" data-account-id="${acc.id}"
                      onclick="selectAccount('${escapeJs(acc.email)}')">
                     <div class="account-token-badge">${tokenBadge}</div>
+                    <div class="refresh-status-badge" data-refresh-status="idle">⏸</div>
                     <div class="account-card-top">
                         <input type="checkbox" class="account-select-checkbox" value="${acc.id}"
                                ${isChecked ? 'checked' : ''}
@@ -328,6 +331,14 @@
                             ${isFailed ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); showRefreshError(${acc.id}, '${escapeJs(acc.last_refresh_error || '未知错误')}', '${escapeJs(acc.email)}', '${escapeJs(acc.account_type || 'outlook')}', '${escapeJs(acc.provider || 'outlook')}')" style="padding:1px 6px;font-size:0.65rem;">${escapeHtml(translateAppTextLocal('查看错误'))}</button>` : ''}
                         </div>
                         <div class="account-actions">
+                            ${supportsTokenRefresh
+                                ? `<button class="btn-icon" onclick="event.stopPropagation(); refreshAccountToken(${acc.id}, '${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('刷新 Token'))}">🔄</button>`
+                                : ''
+                            }
+                            ${supportsTokenRefresh
+                                ? `<button class="btn-icon" onclick="event.stopPropagation(); showRefreshHistory(${acc.id}, '${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('刷新历史'))}">📊</button>`
+                                : ''
+                            }
                             <button class="btn-icon ${notificationEnabled ? 'tg-push-active' : ''}" onclick="event.stopPropagation(); toggleTelegramPush(${acc.id}, ${!notificationEnabled})" title="${escapeHtml(translateAppTextLocal(notificationEnabled ? '该邮箱通知参与（已开启）' : '开启该邮箱通知参与'))}">🔔</button>
                             <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); copyVerificationInfo('${escapeJs(acc.email)}', this)" title="${escapeHtml(translateAppTextLocal('验证码'))}" style="font-size:0.72rem;padding:2px 8px;">${escapeHtml(translateAppTextLocal('验证码'))}</button>
                             <button class="btn-icon" onclick="event.stopPropagation(); copyEmail('${escapeJs(acc.email)}')" title="${escapeHtml(translateAppTextLocal('复制'))}">📋</button>

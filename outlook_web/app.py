@@ -31,6 +31,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         )
         from outlook_web.routes import (
             accounts,
+            analytics,
             audit,
             emails,
             external_pool,
@@ -143,6 +144,7 @@ def create_app(*, autostart_scheduler: Optional[bool] = None):
         app.register_blueprint(tags.create_blueprint())
         app.register_blueprint(accounts.create_blueprint())
         app.register_blueprint(emails.create_blueprint())
+        app.register_blueprint(analytics.create_blueprint())
         app.register_blueprint(temp_emails.create_blueprint(csrf_exempt=csrf_exempt))
         app.register_blueprint(settings.create_blueprint())
         app.register_blueprint(scheduler.create_blueprint())
