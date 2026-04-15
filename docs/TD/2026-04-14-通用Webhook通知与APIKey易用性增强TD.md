@@ -1,8 +1,8 @@
 # TD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.6
+- 文档版本: v1.7
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.6 — 回填发布续推前主工作树与运行态核对）
+- 更新日期: 2026-04-15（v1.7 — 回填发布后格式化门禁修复与回归）
 - 文档类型: 技术细节设计
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -550,3 +550,22 @@ const key = Array.from(bytes, b => ALPHABET[b % ALPHABET.length]).join('');
    - 结论：此前后台服务已退出，本轮先记录状态，不做额外启停动作。
 4. 发布流程约束：
    - 按 `RELEASE.md` 执行 Python/Docker/GitHub Release 链路（提交→tag→push→Release/Actions 监控）。
+
+### 10.6 发布后质量门禁修复（2026-04-15）
+
+1. 推送后 CI 结果：
+   - `Create GitHub Release`（tag）成功；
+   - `Code Quality`（main）失败；
+   - `Build and Push Docker Image`（main/tag）失败（受 quality-gate 阻断）。
+2. 失败根因：
+   - `black --check` 未通过；日志显示多处文件需格式化（包含 webhook 相关代码与测试文件）。
+3. 本地修复执行：
+   - `python -m black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+   - `python -m isort --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+   - `python -m black --check ...` + `python -m isort --check-only ...` 均通过。
+4. 修复后回归复核：
+   - `test_[a-f]*` → Ran 346, OK
+   - `test_[g-l]*` → Ran 89, OK
+   - `test_[m-r]*` → Ran 231, OK (skipped=7)
+   - `test_[s-z]*` → Ran 492, OK
+   - 汇总：**1158 tests 通过，skipped=7**。

@@ -8,6 +8,93 @@
 
 ### 操作记录
 
+#### 67. v1.17.0 发布后质量门禁修复（black/isort）与分批回归复核
+
+**时间**：2026-04-15
+
+**本次操作**：
+
+1. 发布后状态确认
+   - 当前分支：`main...origin/main`（已与远端同步）
+   - 推送后 CI 历史确认：
+     - `Create GitHub Release`（tag）✅
+     - `Code Quality`（main）❌
+     - `Build and Push Docker Image`（main/tag）❌（受 quality-gate 阻断）
+     - `Python Tests`（main）✅
+     - `SonarCloud Scan`（main）✅
+
+2. 质量门禁修复执行
+   - `python -m black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+   - `python -m isort --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+   - 格式化检查复核：
+     - `python -m black --check ...` ✅
+     - `python -m isort --check-only --profile black ...` ✅
+
+3. 回归复核（分批）
+   - `python -m unittest discover -s tests -v -p "test_[a-f]*.py"` → `Ran 346, OK`
+   - `python -m unittest discover -s tests -v -p "test_[g-l]*.py"` → `Ran 89, OK`
+   - `python -m unittest discover -s tests -v -p "test_[m-r]*.py"` → `Ran 231, OK (skipped=7)`
+   - `python -m unittest discover -s tests -v -p "test_[s-z]*.py"` → `Ran 492, OK`
+   - 汇总：**1158 tests 通过，skipped=7**。
+
+4. 会话文档回填
+   - 已更新：
+     - `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.7）
+     - `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.7）
+     - `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.6）
+     - `docs/TODO/2026-04-14-通用Webhook通知与APIKey易用性增强TODO.md`（v1.9）
+     - `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强-PRD-FD-TD-TDD联调检查.md`
+
+5. 现场状态
+   - 本次已完成：格式化修复 + 分批回归 + 文档回填 + WORKSPACE 记录。
+   - 尚未进行本轮修复提交/推送（待用户确认后执行）。
+
+#### 66. v1.17.0 发布执行（单提交策略）与 CI/CD 实时结果回填
+
+**时间**：2026-04-15
+
+**本次操作**：
+
+1. 按用户确认执行“单提交”发布策略
+   - 先执行版本相关回归：
+     - `python -m unittest tests.test_version_update -v` → **Ran 51, OK**
+   - 提交策略：版本口径文件 + 会话文档统一提交。
+
+2. 本地提交与打标
+   - `git add --all`
+   - `git commit -m "docs(release): finalize v1.17.0 notes and session records"`
+   - 生成提交：`4107faf`
+   - `git tag -a v1.17.0 -m "v1.17.0"`
+
+3. 发布产物构建（本地）
+   - Docker 环境：`Client=28.3.2 Server=28.3.2`
+   - 镜像构建：`docker build -t "outlook-email-plus:v1.17.0" .` 成功
+   - 导出产物：
+     - `dist/outlook-email-plus-v1.17.0-docker.tar`（204,728,832 bytes）
+     - `dist/outlookEmailPlus-v1.17.0-src.zip`（4,066,107 bytes）
+
+4. 推送与 Release
+   - `git push origin main` 成功（`9f55918..4107faf`）
+   - `git push origin v1.17.0` 成功（新 tag）
+   - GitHub Release 已创建：
+     - `https://github.com/ZeroPointSix/outlookEmailPlus/releases/tag/v1.17.0`
+
+5. CI/CD 实时结果（推送后）
+   - `Create GitHub Release`（tag）✅ success
+   - `Build and Push Docker Image`（tag）❌ failure
+   - `Code Quality`（main）❌ failure
+   - `Build and Push Docker Image`（main）❌ failure（被 quality-gate 阻断）
+   - `Python Tests`（main）⏳ in progress（记录时）
+   - `SonarCloud Scan`（main）⏳ in progress（记录时）
+
+6. 失败根因（日志已核对）
+   - `black --check` 未通过；日志显示当前仓库中包含多处未格式化文件（含 `outlook_web/errors.py`、`outlook_web/controllers/emails.py`、`outlook_web/controllers/settings.py`、`outlook_web/services/notification_dispatch.py`、`tests/test_version_update.py` 等）。
+   - 由于 `quality-gate` 失败，`docker-build-push`（main/tag）链路被阻断。
+
+7. 现场状态
+   - 本次已完成：提交、tag、push、Release 创建、产物本地构建、CI 状态回传。
+   - 当前主分支已推送，但 CI 仍需后续格式化修复后恢复全绿。
+
 #### 65. 发布续推前主工作树核对与会话文档实况修正
 
 **时间**：2026-04-15

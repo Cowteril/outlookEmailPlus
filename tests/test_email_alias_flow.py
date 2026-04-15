@@ -27,12 +27,7 @@ class EmailAliasFlowTests(unittest.TestCase):
 
     @staticmethod
     def _utc_iso_now() -> str:
-        return (
-            datetime.now(timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _graph_email() -> dict:
@@ -140,9 +135,7 @@ class EmailAliasFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(
-            resp.get_json().get("data", {}).get("verification_code"), "123456"
-        )
+        self.assertEqual(resp.get_json().get("data", {}).get("verification_code"), "123456")
 
     @patch("outlook_web.services.graph.get_emails_graph")
     def test_internal_get_emails_supports_plus_alias_email(self, mock_get_emails_graph):
@@ -160,9 +153,7 @@ class EmailAliasFlowTests(unittest.TestCase):
         self.assertTrue(resp.get_json().get("success"))
 
     @patch("outlook_web.services.graph.get_email_detail_graph")
-    def test_internal_get_email_detail_supports_plus_alias_email(
-        self, mock_get_email_detail_graph
-    ):
+    def test_internal_get_email_detail_supports_plus_alias_email(self, mock_get_email_detail_graph):
         self._insert_outlook_account("user@aliasflow.test")
         mock_get_email_detail_graph.return_value = self._graph_detail()
 

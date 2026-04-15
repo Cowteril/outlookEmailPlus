@@ -115,18 +115,11 @@ class SettingsWebhookApiTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            settings_repo.set_setting(
-                "webhook_notification_token", encrypt_data(existing)
-            )
+            settings_repo.set_setting("webhook_notification_token", encrypt_data(existing))
 
         client = self.app.test_client()
         self._login(client)
-        masked = (
-            client.get("/api/settings")
-            .get_json()
-            .get("settings", {})
-            .get("webhook_notification_token")
-        )
+        masked = client.get("/api/settings").get_json().get("settings", {}).get("webhook_notification_token")
         self.assertTrue(masked)
 
         resp = client.put(
@@ -149,9 +142,7 @@ class SettingsWebhookApiTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            settings_repo.set_setting(
-                "webhook_notification_token", encrypt_data("to-be-cleared")
-            )
+            settings_repo.set_setting("webhook_notification_token", encrypt_data("to-be-cleared"))
 
         client = self.app.test_client()
         self._login(client)
@@ -168,9 +159,7 @@ class SettingsWebhookApiTests(unittest.TestCase):
         with self.app.app_context():
             from outlook_web.repositories import settings as settings_repo
 
-            self.assertEqual(
-                settings_repo.get_setting("webhook_notification_token", ""), ""
-            )
+            self.assertEqual(settings_repo.get_setting("webhook_notification_token", ""), "")
 
     def test_webhook_test_uses_saved_settings_only(self):
         client = self.app.test_client()
@@ -220,9 +209,7 @@ class SettingsWebhookApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         body = resp.get_json() or {}
         self.assertFalse(body.get("success"))
-        self.assertEqual(
-            (body.get("error") or {}).get("code"), "WEBHOOK_NOT_CONFIGURED"
-        )
+        self.assertEqual((body.get("error") or {}).get("code"), "WEBHOOK_NOT_CONFIGURED")
 
 
 if __name__ == "__main__":

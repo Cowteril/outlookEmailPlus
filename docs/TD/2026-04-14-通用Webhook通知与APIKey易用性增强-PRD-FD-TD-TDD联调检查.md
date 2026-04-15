@@ -3,9 +3,9 @@
 > 检查日期：2026-04-14  
 > 对照文档：
 > - PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（v1.5，路径待补）
-> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.6）
-> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.6）
-> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.5）
+> - FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`（v1.7）
+> - TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`（v1.7）
+> - TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`（v1.6）
 
 ---
 
@@ -128,6 +128,16 @@
 - `Buggithubissue` 工作树核对结果：`ahead 1` 且工作区干净，不含本轮 `v1.17.0` 未提交版本改动。
 - 现场运行态：`5000` 端口无监听，`GET /healthz` 连接失败，确认当前本地服务未运行。
 - 结论：发布链路应继续在 `main` 工作树推进，并以 `RELEASE.md` 规范执行后续提交/tag/push/Release 监控。
+
+### 4.9 发布后质量门禁修复回填（2026-04-15）
+
+- 已确认 `v1.17.0` 推送后：
+  - `Create GitHub Release`（tag）成功；
+  - `Code Quality`（main）失败；
+  - `Build and Push Docker Image`（main/tag）失败（quality-gate 阻断）。
+- 失败根因：`black --check` 未通过。
+- 已执行修复：`black` + `isort` + 双 check 均通过。
+- 修复后分批全量回归再次通过：`346 + 89 + 231 + 492 = 1158`（`skipped=7`）。
 
 ---
 

@@ -1,8 +1,8 @@
 # TDD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.5
+- 文档版本: v1.6
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.5 — 回填发布续推前运行态与工作树核对）
+- 更新日期: 2026-04-15（v1.6 — 回填发布后格式化修复与分批回归）
 - 文档类型: 测试设计文档（TDD）
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 FD: `docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`
@@ -356,3 +356,17 @@ python -m unittest discover -s tests -v
 - 交叉对照：`Buggithubissue` 工作树仅 `ahead 1` 且干净，不含本轮版本改动。
 - 运行态确认：`5000` 端口无监听，`/healthz` 连接失败，说明当前无本地服务驻留进程。
 - 结论：测试结论不变（自动化回归仍以 1158/7 为准），发布续推需在 main 工作树继续执行版本提交与发布链路。
+
+### 13.10 发布后质量门禁修复回归（2026-04-15）
+
+- 背景：`v1.17.0` 初次推送后 `Code Quality` 失败，`Build and Push Docker Image`（main/tag）被 quality-gate 阻断。
+- 修复动作：
+  - 执行 `black` 全仓格式化；
+  - 执行 `isort --profile black`；
+  - 执行 `black --check` + `isort --check-only`，结果均通过。
+- 回归复核：
+  - `test_[a-f]*` → **Ran 346, OK**
+  - `test_[g-l]*` → **Ran 89, OK**
+  - `test_[m-r]*` → **Ran 231, OK (skipped=7)**
+  - `test_[s-z]*` → **Ran 492, OK**
+- 汇总：**1158 tests 通过，skipped=7**（修复前后结果一致）。

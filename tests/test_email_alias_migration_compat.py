@@ -30,12 +30,7 @@ class EmailAliasMigrationCompatTests(unittest.TestCase):
 
     @staticmethod
     def _utc_iso_now() -> str:
-        return (
-            datetime.now(timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     @staticmethod
     def _graph_email(message_id: str = "msg-1") -> dict:
@@ -100,9 +95,7 @@ class EmailAliasMigrationCompatTests(unittest.TestCase):
         self.assertTrue(resp.get_json().get("success"))
 
     @patch("outlook_web.services.graph.get_emails_graph")
-    def test_external_messages_alias_and_canonical_are_equivalent(
-        self, mock_get_emails_graph
-    ):
+    def test_external_messages_alias_and_canonical_are_equivalent(self, mock_get_emails_graph):
         canonical_email = self._insert_outlook_account()
         alias_email = "user+signup@aliascompat.test"
         self._set_external_api_key("abc123")
@@ -172,15 +165,11 @@ class EmailAliasMigrationCompatTests(unittest.TestCase):
 
         data_canonical = resp_canonical.get_json().get("data", {})
         data_alias = resp_alias.get_json().get("data", {})
-        self.assertEqual(
-            data_canonical.get("verification_code"), data_alias.get("verification_code")
-        )
+        self.assertEqual(data_canonical.get("verification_code"), data_alias.get("verification_code"))
         self.assertEqual(data_alias.get("verification_code"), "123456")
 
     @patch("outlook_web.services.graph.get_emails_graph")
-    def test_internal_get_emails_alias_and_canonical_are_equivalent(
-        self, mock_get_emails_graph
-    ):
+    def test_internal_get_emails_alias_and_canonical_are_equivalent(self, mock_get_emails_graph):
         canonical_email = self._insert_outlook_account()
         alias_email = "user+signup@aliascompat.test"
         mock_get_emails_graph.return_value = {

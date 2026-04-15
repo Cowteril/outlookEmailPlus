@@ -1,11 +1,11 @@
 # TODO: 通用 Webhook 通知与 API Key 易用性增强
 
 > 创建日期：2026-04-14  
-> 更新日期：2026-04-15（v1.8 — 回填发布续推前主工作树与现场状态核对）  
+> 更新日期：2026-04-15（v1.9 — 回填发布后质量门禁修复执行）  
 > 基于 PRD v1.5：`docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）  
-> 基于 FD v1.6：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
-> 基于 TD v1.6：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
-> 基于 TDD v1.5：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
+> 基于 FD v1.7：`docs/FD/2026-04-14-通用Webhook通知与APIKey易用性增强FD.md`  
+> 基于 TD v1.7：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`  
+> 基于 TDD v1.6：`docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`  
 > 联调检查：`docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强-PRD-FD-TD-TDD联调检查.md`  
 > AI 执行提示词：按会话实时提供（不落库文档）  
 > 目标版本：v1.17.x（待排期）
@@ -101,6 +101,24 @@
   - `tests/test_version_update.py`
 - 对照工作树：`Buggithubissue` 当前 `ahead 1` 且干净，不含本轮未提交版本改动。
 - 运行态复核：5000 端口无监听，`/healthz` 连接失败（当前本地服务未运行）。
+
+### 本次执行回填（2026-04-15，发布后质量门禁修复）
+
+- 已确认推送后流水线状态：
+  - `Create GitHub Release`（tag）成功；
+  - `Code Quality`（main）失败；
+  - `Build and Push Docker Image`（main/tag）失败（quality-gate 阻断）；
+  - `Python Tests`（main）成功；`SonarCloud Scan`（main）成功。
+- 本地修复执行：
+  - `python -m black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+  - `python -m isort --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+  - `python -m black --check ...` + `python -m isort --check-only ...` 均通过。
+- 修复后分批全量回归：
+  - `test_[a-f]*` → **Ran 346, OK**
+  - `test_[g-l]*` → **Ran 89, OK**
+  - `test_[m-r]*` → **Ran 231, OK (skipped=7)**
+  - `test_[s-z]*` → **Ran 492, OK**
+- 汇总：**1158 tests 通过，skipped=7**。
 
 ---
 

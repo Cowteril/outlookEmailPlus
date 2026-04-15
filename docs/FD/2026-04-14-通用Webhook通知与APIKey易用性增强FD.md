@@ -1,8 +1,8 @@
 # FD: 通用 Webhook 通知与 API Key 易用性增强
 
-- 文档版本: v1.6
+- 文档版本: v1.7
 - 创建日期: 2026-04-14
-- 更新日期: 2026-04-15（v1.6 — 回填发布续推前主工作树与运行态核对）
+- 更新日期: 2026-04-15（v1.7 — 回填发布后质量门禁修复执行）
 - 关联 PRD: `docs/PRD/2026-04-14-通用Webhook通知与APIKey易用性增强PRD.md`（路径待补）
 - 关联 TD: `docs/TD/2026-04-14-通用Webhook通知与APIKey易用性增强TD.md`
 - 关联 TDD: `docs/TDD/2026-04-14-通用Webhook通知与APIKey易用性增强TDD.md`
@@ -270,6 +270,21 @@
 - 差异核对：`Buggithubissue` 工作树当前仅 `ahead 1` 且干净，不含本轮 `v1.17.0` 未提交版本改动。
 - 运行态核对：`5000` 端口当前无监听，`GET /healthz` 连接失败（说明此前后台进程已退出）。
 - 发布口径：后续按 `RELEASE.md` 的 Python/Docker/GitHub Release 流程继续推进，不使用 Tauri/Cargo/NPM 路径。
+
+会话进展回填（2026-04-15，发布后质量门禁修复）：
+
+- `v1.17.0` 已完成提交/tag/push/Release 创建，但初次 CI 出现 `Code Quality` 失败并阻断 `Build and Push Docker Image`（main/tag）。
+- 失败根因：`black --check` 不通过（日志显示多文件需格式化）。
+- 会话已执行修复：
+  - `python -m black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+  - `python -m isort --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py`
+  - `black --check` + `isort --check-only` 均通过。
+- 修复后分批回归再次通过：
+  - `test_[a-f]*` → Ran 346, OK
+  - `test_[g-l]*` → Ran 89, OK
+  - `test_[m-r]*` → Ran 231, OK (skipped=7)
+  - `test_[s-z]*` → Ran 492, OK
+  - 汇总：**1158 tests 通过，skipped=7**。
 
 ---
 

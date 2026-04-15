@@ -78,9 +78,7 @@ def _build_body_excerpt(message: dict[str, Any]) -> str:
 
 
 def build_business_webhook_text(source: dict[str, Any], message: dict[str, Any]) -> str:
-    source_type_text = (
-        "普通邮箱" if source.get("source_type") == "account" else "临时邮箱"
-    )
+    source_type_text = "普通邮箱" if source.get("source_type") == "account" else "临时邮箱"
     return (
         f"来源邮箱: {_stringify(source.get('label') or source.get('email'))}\n"
         f"来源类型: {source_type_text}\n"
@@ -164,9 +162,7 @@ def send_business_webhook_notification(
     token: str,
 ) -> None:
     text_body = build_business_webhook_text(source, message)
-    send_webhook_message(
-        url=url, token=token, text_body=text_body, timeout_sec=10, retry=1
-    )
+    send_webhook_message(url=url, token=token, text_body=text_body, timeout_sec=10, retry=1)
 
 
 def send_test_webhook_message() -> dict[str, Any]:
@@ -201,9 +197,7 @@ def send_test_webhook_message() -> dict[str, Any]:
     text_body = build_business_webhook_text(test_source, test_message)
 
     try:
-        send_webhook_message(
-            url=url, token=token, text_body=text_body, timeout_sec=10, retry=1
-        )
+        send_webhook_message(url=url, token=token, text_body=text_body, timeout_sec=10, retry=1)
     except WebhookPushError as exc:
         raise WebhookPushError(
             "WEBHOOK_TEST_SEND_FAILED",

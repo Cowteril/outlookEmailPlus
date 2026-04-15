@@ -47,9 +47,7 @@ class WebhookPushServiceTests(unittest.TestCase):
         post_mock.assert_called_once()
         kwargs = post_mock.call_args.kwargs
         self.assertEqual(kwargs.get("timeout"), 10)
-        self.assertEqual(
-            kwargs.get("headers", {}).get("Content-Type"), "text/plain; charset=utf-8"
-        )
+        self.assertEqual(kwargs.get("headers", {}).get("Content-Type"), "text/plain; charset=utf-8")
         self.assertNotIn("X-Webhook-Token", kwargs.get("headers", {}))
 
     def test_send_webhook_message_retries_once_then_success(self):
