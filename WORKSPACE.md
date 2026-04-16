@@ -8,6 +8,25 @@
 
 ### 操作记录
 
+#### 127. 文档同步提交已推送到 origin/main
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 推送范围
+   - 推送分支：`main -> origin/main`
+   - 已推送提交：
+     - `8c63ae7` `docs: update demo url and pool api docs`
+     - `5965b26` `docs(workspace): record doc sync update`
+
+2. 推送结果
+   - `git push origin main` 已成功
+   - 远端 `main` 已从 `79e3011` 前进到 `5965b26`
+
+3. 当前状态
+   - README、双语对外 API 文档、`WORKSPACE.md` 的最新同步结果均已进入远端主线
+
 #### 126. README 与对外 API 文档同步更新：演示地址切换为 demo.outlookmailplus.tech
 
 **时间**：2026-04-16
