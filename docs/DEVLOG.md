@@ -27,7 +27,13 @@
 ### 测试/验证
 
 - 目标专项回归：`python -m unittest tests.test_db_schema_v22_pool_project_reuse tests.test_pool_repository_project_reuse tests.test_pool_service_project_reuse tests.test_pool_flow_suite tests.test_pool -v` → `Ran 78 tests`，`OK`
-- 全量回归：`python -m unittest discover -v` → `Ran 1187 tests`，`OK (skipped=7)`
+- 全量回归：`python -m unittest discover -v` → `Ran 1187 tests in 458.110s`，`OK (skipped=7)`
+- 构建验证：
+  - `docker build -t outlook-email-plus:v1.18.0 .` → 成功
+  - Docker 镜像 ID：`sha256:a3fa082473f29ce34054362cf8550c3dce35d0a5f18154d924f15170c3c333cd`
+  - 产物：
+    - `dist/outlook-email-plus-v1.18.0-docker.tar`（204,749,824 bytes）
+    - `dist/outlookEmailPlus-v1.18.0-src.zip`（4,127,512 bytes）
 - Docker 本地构建启动验证：本地构建镜像在隔离数据目录下可健康启动，`GET /healthz` 返回 `200`
 
 ## v1.17.0 - 通用 Webhook 通知与 API Key 易用性增强

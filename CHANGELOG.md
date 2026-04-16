@@ -33,7 +33,11 @@ All notable changes to OutlookMail Plus are documented in this file.
   - 结果：`Ran 78 tests`，`OK`
 - 全量回归（本地 `main`）：
   - `python -m unittest discover -v`
-  - 结果：`Ran 1187 tests`，`OK (skipped=7)`
+  - 结果：`Ran 1187 tests in 458.110s`，`OK (skipped=7)`
+- 构建验证：
+  - `docker build -t outlook-email-plus:v1.18.0 .` → 成功
+  - `dist/outlook-email-plus-v1.18.0-docker.tar`
+  - `dist/outlookEmailPlus-v1.18.0-src.zip`
 - Docker 运行态验证：
   - 默认 Compose 路径因挂载损坏的本地数据库而启动失败，根因已确认
   - 本地构建镜像使用隔离数据目录启动后，`GET /healthz` 返回 `200`
