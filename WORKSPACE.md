@@ -8,6 +8,36 @@
 
 ### 操作记录
 
+#### 124. v1.18.0 发布后检查：Release 成功，远端质量门禁仍有阻塞
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. Release 状态复核
+   - `gh release view v1.18.0` 已确认：
+     - Release 已创建
+     - 非草稿、非预发布
+     - 两份附件已上传成功
+
+2. 远端工作流状态
+   - `Python Tests`（main）✅ success
+   - `Code Quality`（main）❌ failure
+   - `Build and Push Docker Image`（main）❌ failure
+   - `Build and Push Docker Image`（tag: `v1.18.0`）❌ failure
+
+3. 失败根因
+   - 三条失败链路根因一致：formatter gate 未通过
+   - 远端日志显示 `black --check` 要求重新格式化以下 3 个文件：
+     - `outlook_web/db.py`
+     - `tests/test_db_schema_v22_pool_project_reuse.py`
+     - `tests/test_pool_service_project_reuse.py`
+   - 因 `quality-gate` 失败，Docker build-push（main/tag）链路被阻断
+
+4. 当前结论
+   - `v1.18.0` GitHub Release 页面与附件已成功发布
+   - 但远端 CI 还不是全绿，若要补齐镜像发布闭环，下一步需要先处理上述格式化问题并重新触发工作流
+
 #### 123. v1.18.0 正式发布完成（GitHub Release + 附件上传）
 
 **时间**：2026-04-16
