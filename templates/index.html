@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -310,7 +310,7 @@
                         <div style="padding:6px 12px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:8px;font-size:0.78rem;flex-shrink:0;">
                             <label style="color:var(--text-muted);font-weight:500;">排序：</label>
                             <button class="btn btn-sm sort-btn active" data-sort="refresh_time" onclick="sortAccounts('refresh_time')">刷新时间</button>
-                            <button class="btn btn-sm sort-btn" data-sort="email" onclick="sortAccounts('email')">📧 邮箱名</button>
+                            <button class="btn btn-sm sort-btn" data-sort="email" onclick="sortAccounts('email')">邮箱名</button>
                             <div style="margin-left:auto;display:flex;align-items:center;gap:4px;">
                                 <input type="checkbox" id="selectAllCheckbox" onclick="toggleSelectAll()" style="cursor:pointer;">
                                 <label for="selectAllCheckbox" style="font-size:0.72rem;color:var(--text-muted);cursor:pointer;">全选</label>
@@ -329,7 +329,7 @@
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('add')">打标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchTagModal('remove')">去标签</button>
                             <button class="btn btn-sm btn-ghost" onclick="showBatchMoveGroupModal()">移动分组</button>
-                            <button class="btn btn-sm btn-primary" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
+                            <button class="btn btn-sm btn-primary" onclick="showBatchRefreshConfirm()">刷新 Token</button>
                             <button class="btn btn-sm btn-danger" onclick="showBatchDeleteConfirm()">删除</button>
                         </div>
                     </div>
@@ -376,20 +376,12 @@
                                 <button class="btn btn-sm btn-ghost" onclick="showEmailList()">返回</button>
                                 <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">全屏查看</button>
                                 <button class="btn btn-sm btn-secondary" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">验证码</button>
-                            <button class="btn btn-sm btn-danger" onclick="confirmBatchDeleteEmails()">🗑️ 删除</button>
-                        </div>
-                        <div id="emailDetailSection" style="display:none;border-top:1px solid var(--border);">
-                            <div class="email-detail-toolbar" id="emailDetailToolbar">
-                                <button class="btn btn-sm btn-ghost" onclick="showEmailList()">← 返回</button>
-                                <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">🔍 全屏查看</button>
-                                <button class="btn btn-sm btn-accent" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
                                 <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;margin-left:8px;cursor:pointer;">
                                     <input type="checkbox" id="trustEmailCheckbox" onchange="toggleTrustMode(this)">
                                     <span style="user-select:none;">信任此邮件</span>
                                 </label>
                                 <div style="flex:1;"></div>
                                 <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">删除</button>
-                                <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">🗑️ 删除</button>
                             </div>
                             <div class="email-detail-container" id="emailDetail">
                                 <div class="empty-state">
@@ -442,7 +434,7 @@
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('add')">打标签</button>
                                 <button class="btn-inline ghost" onclick="showBatchTagModal('remove')">去标签</button>
                                 <button class="btn-inline" onclick="showBatchMoveGroupModal()">移动分组</button>
-                                <button class="btn-inline" onclick="showBatchRefreshConfirm()">🔄 刷新 Token</button>
+                                <button class="btn-inline" onclick="showBatchRefreshConfirm()">刷新 Token</button>
                                 <button class="btn-inline primary" onclick="showBatchDeleteConfirm()">删除</button>
                             </div>
                         </div>
@@ -499,15 +491,15 @@
                             <span class="column-title">邮件详情</span>
                         </div>
                         <div class="email-detail-toolbar" id="tempEmailDetailToolbar" style="display:none;">
-                            <button class="btn btn-sm btn-ghost" onclick="showEmailList()">← 返回</button>
-                            <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">🔍 全屏查看</button>
-                            <button class="btn btn-sm btn-accent" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">🔑 验证码</button>
+                            <button class="btn btn-sm btn-ghost" onclick="showEmailList()">返回</button>
+                            <button class="btn btn-sm btn-ghost" onclick="openFullscreenEmail()">全屏查看</button>
+                            <button class="btn btn-sm btn-secondary" onclick="extractVerificationFromDetail(this)" title="从邮件正文提取验证码/链接" style="font-size:0.72rem;padding:2px 8px;">验证码</button>
                             <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;margin-left:8px;cursor:pointer;">
                                 <input type="checkbox" id="tempEmailTrustCheckbox" onchange="toggleTrustMode(this)">
                                 <span style="user-select:none;">信任此邮件</span>
                             </label>
                             <div style="flex:1;"></div>
-                            <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">🗑️ 删除</button>
+                            <button class="btn btn-sm btn-danger" onclick="confirmDeleteCurrentEmail()">删除</button>
                         </div>
                         <div class="email-detail-container" id="tempEmailDetail">
                             <div class="empty-state">
@@ -532,7 +524,7 @@
             </div>
 
             <!-- ===== Page: Settings ===== -->
-            <div class="page page-hidden" id="page-settings" style="padding: 1.5rem; max-width: 720px;">
+            <div class="page page-hidden" id="page-settings-old" style="padding: 1.5rem; max-width: 720px; display: none;">
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">系统设置</div>
@@ -788,7 +780,7 @@
 
                         <!-- 保存按钮 -->
                         <div style="display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-light);">
-                            <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+                            <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
                         </div>
                     </div>
             <div class="page page-hidden" id="page-settings" style="padding: 1.5rem;">
@@ -820,7 +812,7 @@
                                 </div>
                                 <!-- 保存按钮 -->
                                 <div style="margin-top: 1.5rem;">
-                                    <button class="btn btn-primary" onclick="saveSettings()">💾 保存设置</button>
+                                    <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
                                 </div>
                             </div>
                         </div>
@@ -1164,7 +1156,7 @@
                                     <div class="form-hint">这里只配置 Email 渠道的接收邮箱，不会让所有普通邮箱自动发送。</div>
                                 </div>
                                 <div class="form-group" style="margin-top: 0.5rem;">
-                                    <button class="btn btn-outline" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">📨 发送测试邮件</button>
+                                    <button class="btn btn-outline" onclick="testEmailNotification()" id="btnTestEmailNotification" style="font-size: 0.85rem;">发送测试邮件</button>
                                     <div class="form-hint">按"先保存，再测试"处理；成功语义为"请求已提交，请检查收件箱"。</div>
                                 </div>
                             </div>
@@ -1199,13 +1191,13 @@
                                     <label class="form-label">代理地址 <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 400;">（可选，访问 Telegram API 时使用）</span></label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <input type="text" class="form-input" id="telegramProxyUrl" placeholder="socks5://user:pass@host:port 或 http://host:port" style="max-width: 400px;">
-                                        <button class="btn btn-outline" onclick="testTelegramProxy()" id="btnTestTelegramProxy" style="font-size: 0.85rem; white-space: nowrap;">🔗 测试连通性</button>
+                                        <button class="btn btn-outline" onclick="testTelegramProxy()" id="btnTestTelegramProxy" style="font-size: 0.85rem; white-space: nowrap;">测试连通性</button>
                                         <span id="telegramProxyTestResult" style="font-size: 0.85rem;"></span>
                                     </div>
                                     <div class="form-hint">留空则直连。格式：socks5://host:port 或 http://host:port</div>
                                 </div>
                                 <div class="form-group" style="margin-top: 0.5rem;">
-                                    <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">📨 发送测试消息</button>
+                                    <button class="btn btn-outline" onclick="testTelegramPush()" id="btnTestTelegram" style="font-size: 0.85rem;">发送测试消息</button>
                                     <div class="form-hint">验证当前 Telegram 通知通道是否配置正确</div>
                                 </div>
                             </div>
@@ -1284,7 +1276,7 @@
                                     </div>
                                     <div class="form-group" style="margin-top: 0.5rem;">
                                         <div style="display: flex; align-items: center; gap: 8px;">
-                                            <button class="btn btn-outline" onclick="testWatchtower()" id="btnTestWatchtower" style="font-size: 0.85rem;">🔗 测试连通性</button>
+                                            <button class="btn btn-outline" onclick="testWatchtower()" id="btnTestWatchtower" style="font-size: 0.85rem;">测试连通性</button>
                                             <span id="watchtowerTestResult" style="font-size: 0.85rem;"></span>
                                         </div>
                                         <div class="form-hint">验证 Watchtower 服务是否可达且 Token 正确</div>
