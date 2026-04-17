@@ -8,6 +8,734 @@
 
 ### 操作记录
 
+#### 149. 按用户要求执行“单账号重试验证”时的现场阻塞：脚本登录口令不匹配
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 验证准备
+   - 目标失败账号：`MistyBaker7602@hotmail.com`
+   - 账号 ID：`226`
+
+2. 执行尝试
+   - 尝试通过本地脚本会话调用：`POST /api/accounts/226/retry-refresh`
+   - 先按默认口令执行登录：`POST /login`（password=`12345678`）
+
+3. 实际结果
+   - 登录返回：`401 LOGIN_INVALID_PASSWORD`
+   - 后续重试接口返回：`401 AUTH_REQUIRED`
+   - 结论：当前环境登录口令已非默认值，导致脚本态无法直接代用户发起“单账号重试”。
+
+4. 当前状态
+   - 单账号重试验证尚未完成，需改为：
+     - 用户在已登录前端手工点“重试该账号”，我后台实时抓取 run/log；或
+     - 用户提供当前口令后再由脚本继续。
+
+5. 文档同步
+   - 本条已回填 `WORKSPACE.md`。
+   - BUG 文档同步追加“单账号重试验证阻塞点”。
+
+#### 148. 对“1 个失败账号”做复盘分析：确认为外部 TLS 链路瞬时异常
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 失败样本复盘
+   - 目标 run：`9e56581aef1544168d254b1a32cedb59`
+   - run 结果：`completed`，`100 success / 1 failed`
+   - 失败账号：`MistyBaker7602@hotmail.com`（`account_id=226`）
+
+2. 失败明细与账号上下文
+   - 失败错误：
+     - `HTTPSConnectionPool ... SSLError(SSLEOFError ... UNEXPECTED_EOF_WHILE_READING)`
+   - 账号信息：
+     - `provider=outlook`、`account_type=outlook`、`status=active`
+     - 所属分组 `group_id=1`（默认分组），`proxy_url=null`
+
+3. 历史分布核查
+   - `scheduled + failed` 聚合仅命中该账号 1 次（`fail_count=1`）
+   - 未发现系统性批量失败模式
+
+4. 结论
+   - 当前证据更符合“外部网络/TLS 瞬时波动”导致的单点失败，非代码逻辑普遍缺陷。
+   - 与此前“锁遗留导致立即冲突”属于不同类别问题。
+
+5. 文档同步
+   - 本条已回填 `WORKSPACE.md`
+   - BUG 文档已追加“单失败账号根因复盘”小节
+
+#### 147. 验收完成态快照：本轮全量刷新已完成（100 成功 / 1 失败，锁已释放）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按用户要求获取“完成态快照”
+   - 目标 run：`9e56581aef1544168d254b1a32cedb59`
+   - 最终状态：
+     - `status=completed`
+     - `started_at=2026-04-17 03:48:03`
+     - `finished_at=2026-04-17 03:58:35`
+     - `total=101`
+     - `success_count=100`
+     - `failed_count=1`
+     - `message=完成：成功 100，失败 1`
+
+2. 锁状态确认
+   - `LOCK_EXISTS=False`（刷新结束后锁已正常释放）
+
+3. 刷新日志聚合
+   - `account_refresh_logs`（run_id 对应）
+     - `total=101`
+     - `success=100`
+     - `failed=1`
+
+4. 失败明细
+   - 失败账号：`MistyBaker7602@hotmail.com`
+   - 错误类型：请求过程 SSL EOF 网络异常
+   - 错误摘录：
+     - `SSLError(SSLEOFError ... UNEXPECTED_EOF_WHILE_READING)`
+
+5. 结论
+   - 本轮全量刷新闭环正常：任务完成、锁释放、绝大多数账号成功。
+   - 单个失败属于外部网络/SSL链路波动类问题，不是刷新流程卡死问题。
+
+6. 文档同步
+   - 本条已回填 `WORKSPACE.md`
+   - BUG 文档同步追加本轮“完成态快照 + 单失败归因”
+
+#### 146. 人工验收实时跟踪（继续）：全量刷新任务持续成功推进中
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按用户要求继续后台读取运行状态
+   - 当前锁存在且正常：
+     - `name=refresh_all_tokens`
+     - `owner_id=cb396ea3e1e1400c9bae1bf8546e7902`
+     - `expires_in_sec≈6609.94`
+   - 最新 run：
+     - `id=9e56581aef1544168d254b1a32cedb59`
+     - `trigger_source=scheduled_manual`
+     - `status=running`
+     - `total=101`
+
+2. 刷新日志增量观察
+   - `account_refresh_logs` 最新 15 条全部为：
+     - `refresh_type=scheduled`
+     - `status=success`
+     - `run_id=9e56581aef1544168d254b1a32cedb59`
+
+3. 结论
+   - 当前全量刷新执行健康，正在按批次持续成功处理账号。
+   - 执行期间若触发其他刷新入口，命中冲突提示属互斥保护预期行为。
+
+4. 文档同步
+   - 本条已回填 `WORKSPACE.md`。
+   - BUG 文档同步补充“验收进行中持续 success”观测结果。
+
+#### 145. 按用户要求执行一次全量 unittest 验证（通过）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 执行全量测试
+   - 命令：`python -m unittest discover -v`
+   - 超时设置：`300000ms`
+
+2. 结果汇总
+   - `Ran 1194 tests in 290.291s`
+   - `OK (skipped=7)`
+   - 本轮未发现失败用例（无 FAIL / ERROR）
+
+3. 结论
+   - 当前工作树（包含本会话的刷新冲突与权限提示修复）在全量 unittest 下通过。
+
+4. 文档同步
+   - 本条已回填 `WORKSPACE.md`
+   - BUG 文档同步追加“全量回归通过”记录
+
+#### 144. 后台实时跟踪用户本次全量刷新：当前任务已实际在跑（非立即冲突）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按用户要求后台读取当前运行态
+   - `distributed_locks`：存在当前锁
+     - `name=refresh_all_tokens`
+     - `owner_id=cb396ea3e1e1400c9bae1bf8546e7902`
+   - `refresh_runs` 最新记录：
+     - `id=9e56581aef1544168d254b1a32cedb59`
+     - `trigger_source=scheduled_manual`
+     - `status=running`
+     - `total=101`
+
+2. 刷新日志增量（同一 run_id）
+   - `account_refresh_logs` 最新 10 条均为 `refresh_type=scheduled` 且 `status=success`
+   - 说明本次全量刷新已进入实质处理阶段，并持续产出成功记录
+
+3. 当前判断
+   - 这次不是“点击即冲突”；任务已正常启动并在执行。
+   - 任务执行中再触发其它刷新入口会命中冲突提示属于预期互斥行为。
+
+4. 附加观察
+   - 通过脚本访问 `/api/system/health` 返回 401（未带有效登录态），不影响上述数据库侧运行态判断。
+
+5. 文档同步
+   - 本条执行结果已回填 `WORKSPACE.md`。
+   - BUG 文档同步追加“本次实时跟踪结果：run 正在执行且持续 success”。
+
+#### 143. 现场恢复已执行：清理遗留刷新锁并收尾卡住的 running 任务
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 执行前快照与备份
+   - 执行前状态（`data/outlook_accounts.db`）：
+     - `distributed_locks` 存在 `refresh_all_tokens` 1 条
+     - `refresh_runs` 存在 `status=running` 1 条（`id=f2da7e91a4ef43d9ad10b0533d7ea737`）
+   - 备份数据库：
+     - `data/outlook_accounts.before_lock_cleanup_20260417_114329.db`
+
+2. 现场恢复动作（已执行）
+   - 删除遗留锁：`DELETE FROM distributed_locks WHERE name='refresh_all_tokens'`
+   - 收尾遗留 run：将 `status='running'` 的刷新任务标记为 `failed`，补 `finished_at` 与 message
+   - 实际结果：
+     - `DELETED_LOCKS=1`
+     - `UPDATED_RUNS=1`
+
+3. 执行后核验
+   - `AFTER_LOCKS=0`（刷新锁已清空）
+   - 目标 run 状态更新为：
+     - `status=failed`
+     - `finished_at=2026-04-17 03:44:30`
+     - `message=Recovered after stale running lock cleanup`
+
+4. 风险信息（关键）
+   - 当前配置估算刷新锁 TTL：
+     - `refresh_delay_seconds=5`
+     - 可刷新 Outlook 活跃账号约 `101`
+     - 预计锁 TTL = `7200s`（120 分钟）
+   - 这意味着一旦刷新任务异常中断，用户会在较长时间内持续命中“前面有人”。
+
+5. 文档同步
+   - 本条已写入 `WORKSPACE.md`
+   - BUG 文档已追加“现场恢复执行记录 + TTL 风险”说明
+
+#### 142. 深入读取日志+数据库定位“单次全量也冲突”根因：遗留运行态锁未释放
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 复核日志（按用户要求）
+   - 继续读取 `manual_acceptance_5000*.err.log`
+   - 观察到多次 `trigger-scheduled-refresh?force=true` 后出现冲突/权限两类问题
+
+2. 读取数据库锁与刷新运行态（`data/outlook_accounts.db`）
+   - `distributed_locks` 当前存在：
+     - `name=refresh_all_tokens`
+     - `owner_id=361421e017704da395890e5543c6aabe`
+     - `expires_at` 仍在未来（会持续拦截新的刷新请求）
+   - `refresh_runs` 发现遗留记录：
+     - `id=f2da7e91a4ef43d9ad10b0533d7ea737`
+     - `trigger_source=scheduled_manual`
+     - `status=running`
+     - `finished_at=NULL`
+     - 开始时间对应用户现场触发窗口
+
+3. 根因结论
+   - 用户“单次全量刷新就提示前面有人”并非误报。
+   - 直接原因是：**历史刷新任务进入 running 后未正常收尾，导致分布式锁仍有效**，后续刷新均命中 `REFRESH_CONFLICT`。
+
+4. 当前状态
+   - 问题已从“现象不清楚”收敛为“锁遗留 + run 未收尾”的确定性根因。
+   - 下一步可选：
+     - 仅清理现场（删锁+标记遗留 run failed）先恢复可用；
+     - 或追加代码级自愈策略，避免后续再次出现同类卡死。
+
+5. 文档同步
+   - 本条已写入 `WORKSPACE.md`
+   - BUG 文档同步补充“锁遗留根因”分析与证据
+
+#### 141. 人工验收前确认服务状态：5000 已在运行并可直接验证
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按用户“启动服务验证”要求检查运行态
+   - 端口检查：`0.0.0.0:5000` 处于 `Listen`
+   - OwningProcess：`49344`
+
+2. 进程核对
+   - 应用进程：`python.exe start.py`（PID=`49344`）
+   - 后台包装进程：`powershell.exe`（PID=`15408`）
+
+3. 结论
+   - 服务已处于可用状态，无需重复启动。
+   - 可直接进入前端做“单次全量刷新失败提示（NO_MAIL_PERMISSION）”人工验收。
+
+4. 文档同步
+   - 本条运行态确认已回填 `WORKSPACE.md`。
+   - BUG 文档同步补充“当前验收服务仍在监听”的状态说明。
+
+#### 140. 继续修复单次全量刷新失败提示：补 NO_MAIL_PERMISSION 可执行指引（前端）并回归
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 目标（对应用户现场反馈）
+   - 单次全量刷新失败时，避免前端只显示笼统“刷新失败”。
+   - 对日志中已确认的 `NO_MAIL_PERMISSION`（403）给出可执行步骤。
+
+2. 前端实现
+   - 更新：`static/js/main.js`
+   - 新增：`buildRefreshAllPermissionErrorSummary(errorPayload)`
+   - 在 `refreshAllAccounts()` 的 SSE `type=error` 分支新增：
+     - 若 `errCode === 'NO_MAIL_PERMISSION'`：
+       - 展示结构化摘要（含 `[Code] NO_MAIL_PERMISSION`）
+       - 明确提示重新授权并授予 `Mail.Read / Mail.ReadWrite`
+       - 带 Trace ID 反馈指引（若存在）
+     - 其余错误保持原有分支逻辑（冲突 warning、其他 error）
+
+3. 测试补强
+   - 更新：`tests/test_frontend_account_type_and_refresh_suggestions_contract.py`
+   - 新增用例：`test_refresh_all_no_mail_permission_uses_actionable_summary`
+   - 断言点：
+     - 存在 `buildRefreshAllPermissionErrorSummary`
+     - 存在 `NO_MAIL_PERMISSION` 专门分支
+     - 文案包含 `Mail.Read 或 Mail.ReadWrite`
+
+4. 回归结果
+   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v`
+     - `Ran 9 tests ... OK`
+   - `python -m unittest tests.test_refresh_outlook_only -v`
+     - `Ran 10 tests ... OK`
+
+5. 当前状态
+   - “单次全量刷新失败但无可执行细节”的前端体验已补强到 `NO_MAIL_PERMISSION` 场景。
+   - 冲突类（`REFRESH_CONFLICT`）与权限类（`NO_MAIL_PERMISSION`）现均有明确行动提示。
+
+#### 139. 按用户要求复读多轮人工验收日志并重新判因（单次全量刷新也会失败）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 复读日志范围
+   - `manual_acceptance_5000_20260417_102854.err.log`
+   - `manual_acceptance_5000_20260417_104541.err.log`
+   - `manual_acceptance_5000_20260417_110841.err.log`
+   - `manual_acceptance_5000_20260417_112303.err.log`
+   - `manual_acceptance_5000.err.log`
+
+2. 关键事实（按时间线）
+   - 10:53 轮：存在 `REFRESH_CONFLICT`（`POST /api/accounts/refresh-failed` -> 409）
+   - 11:22 轮：在**单次** `GET /api/accounts/trigger-scheduled-refresh?force=true` 之后出现
+     - `code=NO_MAIL_PERMISSION status=403 type=PermissionError`
+     - details 显示 scope 不含邮件读取权限（Mail.Read / Mail.ReadWrite）
+
+3. 重新判因
+   - 用户现场“单次全量刷新也提示失败”与“重复触发冲突”是两类问题：
+     - A 类：锁冲突（`REFRESH_CONFLICT`）
+     - B 类：账号权限不足（`NO_MAIL_PERMISSION`）
+   - 当前前端“全量刷新”错误展示仍可能退化为通用失败提示，导致 B 类问题感知为“没详细信息”。
+
+4. 当前结论
+   - 不能仅按“全量刷新重复触发”解释用户现场。
+   - 需要继续补齐“全量刷新单次失败时”的前端可执行提示（尤其权限不足场景）以避免只见笼统报错。
+
+5. 文档同步
+   - 本条已写入 `WORKSPACE.md`
+   - BUG 文档已同步追加“日志复盘与双根因（冲突 + 权限）”说明
+
+#### 138. 按用户要求直接启动验收服务（5000）并同步现场状态
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按用户要求直接启动本地服务用于人工测试
+   - 先确认端口：`5000` 初始无监听（`NO_LISTENER`）
+
+2. 启动尝试与现场结果（按真实过程记录）
+   - 尝试 A：`Start-Process python start.py`（带 stdout/stderr 重定向）
+     - 返回：`PID=23604`
+     - 日志：
+       - `manual_acceptance_5000_20260417_110841.out.log`
+       - `manual_acceptance_5000_20260417_110841.err.log`
+     - 进程后续退出，但日志证明服务曾成功拉起并处理请求（含 `trigger-scheduled-refresh?force=true`）
+   - 尝试 B：`cmd /c python start.py 1>>... 2>>...`
+     - 返回：`PID=46892`
+     - 日志：
+       - `manual_acceptance_5000_20260417_112303.out.log`
+       - `manual_acceptance_5000_20260417_112303.err.log`
+     - 该尝试同样出现“启动成功日志”，但监听未保持
+   - 尝试 C（最终生效）：通过后台 PowerShell 包装进程拉起 `python start.py`
+     - 包装进程 PID：`15408`
+     - 当前监听：`0.0.0.0:5000`，OwningProcess=`49344`（Listen）
+
+3. 当前可用状态
+   - 人工验收地址：`http://127.0.0.1:5000`
+   - 当前端口 5000 处于监听中，可继续按冲突场景进行前端体验验证
+
+4. 关联说明
+   - 本轮为“启动服务配合人工测试”动作，不涉及新增业务代码改动。
+   - 已将本轮服务启动轨迹与关键 PID / 日志路径回填到 `WORKSPACE.md`。
+
+#### 137. Plan 模式落地修复：统一刷新冲突可执行提示（后端+前端）并补回归
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 先分析用户现场问题（不是只跑测试）
+   - 复核人工验收日志：`manual_acceptance_5000_20260417_104541.err.log` 出现
+     - `code=REFRESH_CONFLICT status=409`
+     - `POST /api/accounts/refresh-failed`
+   - 结论：用户当前主要痛点是“刷新冲突时提示不够可执行”，且并非仅 selected 链路。
+
+2. 后端修复（`outlook_web/services/refresh.py`）
+   - 统一三条冲突分支的错误语义（scheduled / selected / retry_failed）：
+     - `message` 统一为：`当前已有刷新任务执行中，请等待当前任务完成后再重试`
+     - 补齐 `message_en`：`Another refresh task is already running. Wait for it to finish and retry.`
+   - 目标：保证前端无论命中哪条刷新入口，都拿到一致且可执行的冲突提示。
+
+3. 前端修复（`static/js/main.js`）
+   - `refreshAllAccounts()` 补上 SSE `data.type === 'error'` 显式分支：
+     - 对 `REFRESH_CONFLICT` 使用 `warning` + 错误详情弹窗（含 trace / details）
+     - 其他错误继续 `error`
+   - `retryFailedAccounts()` 针对 `REFRESH_CONFLICT` 单独走可执行文案 warning 提示，不再落到笼统“重试失败”。
+
+4. 测试补强
+   - 更新 `tests/test_refresh_outlook_only.py`：新增 3 个冲突语义回归
+     - `test_manual_trigger_scheduled_refresh_conflict_returns_actionable_message`
+     - `test_selected_refresh_conflict_returns_actionable_message`
+     - `test_retry_failed_accounts_conflict_returns_actionable_message`
+   - 更新 `tests/test_frontend_account_type_and_refresh_suggestions_contract.py`：新增 2 个前端契约检查
+     - `test_refresh_all_sse_error_branch_handles_refresh_conflict`
+     - `test_retry_failed_conflict_branch_uses_warning_with_actionable_message`
+
+5. 回归结果
+   - `python -m unittest tests.test_refresh_outlook_only -v` -> `Ran 10 tests ... OK`
+   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `Ran 8 tests ... OK`
+
+6. 当前状态
+   - 用户反馈的“刷新冲突时只见笼统失败”已在后端语义与前端展示两端同时收敛。
+   - 相关自动化回归已覆盖并通过。
+
+#### 136. Plan 模式继续推进：定向三组回归复跑并同步文档
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 行动前上下文复核（按会话约束）
+   - 先检索关键实现是否仍在：
+     - 后端 `outlook_web/services/refresh.py` 仍包含 `REFRESH_CONFLICT`、`REFRESH_SELECTED_STREAM_FAILED`
+     - 前端 `static/js/main.js` 仍包含：
+       - `buildSelectedRefreshActionGuide(errorPayload)`
+       - `buildSelectedRefreshErrorSummary(errorPayload)`
+       - SSE 错误分支统一调用上述模板
+
+2. 按用户选择执行“定向回归测试”
+   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `Ran 1 test ... OK`
+   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `Ran 4 tests ... OK`
+   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `Ran 6 tests ... OK`
+
+3. 结论
+   - Issue #45 selected 刷新关键链路回归通过
+   - OAuth Tool 账号列表空态与鉴权相关回归通过
+   - 前端刷新失败建议与契约测试回归通过
+
+4. 文档同步
+   - 已更新 `WORKSPACE.md`（本条）
+   - 已更新 `docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`，补充本轮定向复跑结果
+
+#### 135. 继续推进：Selected 刷新失败提示统一化（前端+后端联动）并完成回归
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 背景
+   - 用户在人工验收中反馈：selected 刷新出现失败时，前端提示仍不够清晰，缺少统一可执行指引。
+
+2. 后端（selected 刷新专用）错误语义增强
+   - 更新：`outlook_web/services/refresh.py`
+   - 调整点：
+     - 冲突场景 `REFRESH_CONFLICT` 的 `message/message_en` 更明确为“等待当前任务完成后再重试”
+     - selected 流水线兜底异常码从通用 `REFRESH_FAILED` 细化为 `REFRESH_SELECTED_STREAM_FAILED`
+     - 兜底异常补充更清晰 `message/message_en`
+     - `details` 改为结构化信息（`cause + hint`），便于前端统一渲染“可执行步骤”
+
+3. 前端统一提示模板
+   - 更新：`static/js/main.js`
+   - 新增：
+     - `buildSelectedRefreshActionGuide(errorPayload)`
+     - `buildSelectedRefreshErrorSummary(errorPayload)`
+   - 行为：
+     - 针对 `REFRESH_CONFLICT` / `REFRESH_SELECTED_STREAM_FAILED` 输出统一“三步处理建议”
+     - 自动带上错误码与 Trace ID（若存在），方便用户反馈与后端排查
+     - SSE error 统一走模板，不再只给“刷新执行失败”短句
+
+4. 回归验证
+   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
+   - `python -m unittest tests.test_refresh_outlook_only -v` -> `OK`
+   - `python -m unittest tests.test_frontend_account_type_and_refresh_suggestions_contract -v` -> `OK`
+
+5. 当前状态
+   - selected 刷新失败场景已具备“统一错误码 + 清晰可执行提示 + Trace ID 反馈指引”。
+   - 代码与回归均通过，待用户继续人工验收确认文案体验。
+
+#### 134. 按用户要求继续：4 分片全量通过 + 人工验收服务启动核验
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 按“分片全量”方案执行 unittest（4 分片）
+   - 分片1：`Ran 303 tests in 140.802s`，`OK`
+   - 分片2：`Ran 263 tests in 48.194s`，`OK`
+   - 分片3：`Ran 270 tests in 45.180s`，`OK (skipped=7)`
+   - 分片4：`Ran 352 tests in 74.162s`，`OK`
+   - 结论：本轮分片全量未出现失败与超时。
+
+2. 按用户指定启动人工验收服务（端口 5000）
+   - 启动方式：`Start-Process python start.py`（后台独立进程）
+   - 启动信息：`PID=30976`，日志：
+     - `manual_acceptance_5000.out.log`
+     - `manual_acceptance_5000.err.log`
+   - 日志显示服务曾成功启动并对外提供页面与接口访问（含 `/login`、`/api/settings`、`/token-tool` 等请求）。
+
+3. 启动后状态核验
+   - 以端口监听检查当前时点状态：`5000` 未检测到 listener（`NO_LISTENER`）。
+   - 说明：本轮已完成“启动并人工访问验证”动作，当前时点服务未保持监听，需在后续会话确认是否要再次拉起并保持运行。
+
+4. 文档同步
+   - 本条执行事实已回填 `WORKSPACE.md`。
+   - 相关 BUG 文档将同步补充“本轮分片全量结果 + 人工验收启动记录”。
+
+#### 133. 收尾继续：清理测试产物并复跑关键回归
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 清理临时测试产物
+   - 删除：`test_output.txt`
+   - 目的：保持工作树干净，避免把临时日志误带入后续提交。
+
+2. 复核当前关键改动仍在
+   - `outlook_web/services/refresh.py`：selected 查询补 `provider`，过滤使用 `row["provider"]`
+   - `tests/test_oauth_tool.py`：`setUp()` 清理 `account_claim_logs / account_project_usage / account_refresh_logs / accounts`
+   - `tests/test_refresh_selected_issue45.py`：Issue #45 混合账号 selected 刷新回归用例
+
+3. 关键回归复跑
+   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
+   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
+
+4. 当前状态
+   - 核心修复与关键回归维持通过。
+   - 目前工作树仅保留本次需求相关改动与文档更新，已去除临时测试产物。
+
+#### 132. 继续推进：Issue #45 + OAuth 隔离修复复核，并完成全量分片回归（含超时分裂执行）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 继续按当前真实工作树推进
+   - 保留并复核两处核心修复：
+     - `outlook_web/services/refresh.py`：selected 刷新查询包含 `provider`，过滤使用 `row["provider"]`
+     - `tests/test_oauth_tool.py`：`setUp()` 清理 `account_claim_logs / account_project_usage / account_refresh_logs / accounts`
+   - 目的：同时覆盖 Issue #45 根因与 OAuth 列表空态的跨用例污染。
+
+2. 定向回归复验
+   - `python -m unittest tests.test_refresh_selected_issue45 -v` -> `OK`
+   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
+   - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool tests.test_refresh_selected_issue45 -v`
+     - 结果：`Ran 79 tests ... OK`
+
+3. 全量分片回归（严格 300000ms 超时上限）
+   - 4 分片执行结果：
+     - 分片 1：`Ran 435 tests ... OK (skipped=6)`
+     - 分片 2：`Ran 168 tests ... OK (skipped=1)`
+     - 分片 3：首次执行在 `300000ms` 超时（非断言失败）
+     - 分片 4：`Ran 243 tests ... OK`
+   - 对超时分片 3 进行二次分裂后复验：
+     - 3A：`Ran 210 tests in 216.372s ... OK`
+     - 3B：`Ran 132 tests in 12.155s ... OK`
+   - 结论：分片 3 的问题为执行时长超时，不是功能失败；分裂后对应测试集合全部通过。
+
+4. 文档同步
+   - 已将本轮“分片超时→分裂复验通过”的事实回填到 `WORKSPACE.md`
+   - 后续同步到 BUG 文档中的“补充验证”小节，确保文档口径与当前执行结果一致。
+
+5. 当前状态
+   - Issue #45 修复、OAuth 测试隔离修复、selected 独立回归测试均处于通过状态。
+   - 全量分片回归在现有超时约束下已完成闭环验证。
+
+#### 131. A+B 联动落地：OAuth 隔离修复 + Issue #45 恢复修复并补独立回归
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 按会话选择执行策略
+   - 用户通过寸止明确选择：`A+B都落地（先A后B）`
+
+2. A：OAuth Tool 测试隔离修复（先做）
+   - 更新：`tests/test_oauth_tool.py`
+   - `OAuthToolTestBase.setUp()` 清理策略从“仅删 `@oauth-test` 邮箱”升级为“清理账号与关联表”：
+     - `DELETE FROM account_claim_logs`
+     - `DELETE FROM account_project_usage`
+     - `DELETE FROM account_refresh_logs`
+     - `DELETE FROM accounts`
+   - 目的：避免分片/顺序执行时共享临时 DB 残留污染 `test_accounts_list_empty`
+
+3. B：Issue #45 selected 刷新恢复修复
+   - 更新：`outlook_web/services/refresh.py`
+   - 修复点：
+     - selected 查询补齐 `provider` 列
+     - `row.get("provider")` 改为 `row["provider"]`
+
+4. 新增独立回归测试（避免改动既有大文件导致格式化噪音）
+   - 新增：`tests/test_refresh_selected_issue45.py`
+   - 用例：`test_selected_refresh_mixed_accounts_streams_outlook_only_and_skips_imap`
+   - 覆盖：Outlook+IMAP 混选下，selected 刷新应只处理 Outlook，IMAP 被跳过，SSE 返回 `start/progress/complete`
+
+5. 执行验证
+   - `python -m unittest tests.test_refresh_selected_issue45 -v` → `OK`
+   - `python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` → `OK`
+   - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool -v` → `Ran 78 tests ... OK`
+
+6. 文档同步
+   - 更新：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
+   - 状态从“待恢复修复”更新为“已恢复修复（会话内二次落地并复验）”
+   - 补充本轮新增回归与验证命令结果
+
+7. 当前状态
+   - A（OAuth 隔离）与 B（Issue #45）均已在代码层完成落地并通过定向回归。
+
+#### 130. 继续推进（按用户选择先做A）：复核当前真实状态并先修复 OAuth Tool 测试隔离污染
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 基线复核（先读 WORKSPACE + 关键代码）
+   - 按用户要求先复读 `WORKSPACE.md`，并复查：
+     - `outlook_web/services/refresh.py`
+     - `tests/test_refresh_outlook_only.py`
+     - `tests/test_oauth_tool.py`
+   - 复核结论：
+     - Issue #45 的根因代码在当前工作树仍可见（selected 刷新分支仍是 `row.get("provider")`，且 selected 查询未选 `provider` 列）
+     - OAuth Tool 的 `test_accounts_list_empty` 失败主要来自共享测试库下的跨用例账号残留污染
+
+2. 会话文档按“当前真实状态”修正
+   - 更新：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
+   - 修正点：
+     - 文档状态从“已修复”下调为“待恢复修复（历史已验证，但当前分支未落地）”
+     - 新增“当前真实状态”说明，明确该修复在当前分支未保持
+
+3. A 路线尝试（测试隔离修复）
+   - 尝试更新：`tests/test_oauth_tool.py`
+   - 尝试内容：在 `OAuthToolTestBase.setUp()` 中，将原先仅删除 `email LIKE '%@oauth-test%'` 的局部清理改为全量测试隔离清理：
+     - `DELETE FROM settings WHERE key LIKE 'oauth_tool_%'`
+     - `DELETE FROM account_claim_logs`
+     - `DELETE FROM account_project_usage`
+     - `DELETE FROM accounts`
+   - 目标：消除与其它测试共享临时 DB 时的账号残留，稳定 `test_accounts_list_empty`
+
+4. 验证结果（基于尝试补丁）
+   - 先复现污染场景（修复前）：
+     - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty -v`
+     - 结果：`FAIL`（`test_accounts_list_empty` 读到此前用例残留账号）
+   - 修复后定向回归：
+     - `python -m unittest tests.test_refresh_outlook_only tests.test_oauth_tool.OAuthToolApiAccountListTests -v`
+     - 结果：`Ran 11 tests ... OK`
+   - OAuth Tool 模块回归：
+     - `python -m unittest tests.test_oauth_tool -v`
+     - 结果：`Ran 71 tests ... OK`
+
+5. 当前状态
+   - 文档真实性回填已完成（`WORKSPACE.md` + BUG 文档）
+   - A 路线代码补丁在验证后**已回滚**（当前工作树未保留 `tests/test_oauth_tool.py` 的代码改动）
+   - 回滚原因：需先与用户确认是否接受该文件的额外格式化差异，再决定采用何种落地方式
+   - 待继续：
+     - 先确定 A 路线的最终落地策略（保留补丁 vs 调整方案）
+     - Issue #45 的 selected 刷新最小修复仍需在当前分支重新落地并补回归验证
+
+#### 129. Issue #45 修复后全量回归执行记录（分片）
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 回归目标
+   - 按会话要求执行全量回归，验证 Issue #45（selected 批量刷新）修复是否引入回归
+
+2. 全量执行与超时
+   - 执行：`python -m unittest discover -v`
+   - 结果：受会话执行上限影响，命令在 `300000ms` 处超时（非测试失败终止）
+
+3. 分片执行（4 分片）
+   - 分片 1：`Ran 328 tests`，`FAILED (failures=1, skipped=6)`
+     - 失败用例：`tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty`
+     - 该失败为“列表应为空”断言，与本次 selected 刷新改动链路无直接耦合
+   - 分片 2：`Ran 231 tests`，`OK (skipped=1)`
+   - 分片 3：`Ran 350 tests`，`OK`
+   - 分片 4：`Ran 279 tests`，`OK`
+
+4. 失败项复核
+   - 单独复跑：`python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests.test_accounts_list_empty -v` -> `OK`
+   - 单独复跑类：`python -m unittest tests.test_oauth_tool.OAuthToolApiAccountListTests -v` -> `OK`
+   - 结论：失败表现为分片执行顺序下的测试隔离/顺序依赖问题，非本次功能改动直接回归
+
+5. 本需求相关测试
+   - `python -m unittest tests.test_refresh_outlook_only -v` -> `Ran 8 tests ... OK`
+   - 新增 selected 回归用例在独立与模块级执行均通过
+
+#### 128. Issue #45 深度定位：Selected 批量刷新 SSE 提前失败根因确认并补回归
+
+**时间**：2026-04-16
+
+**本次操作**：
+
+1. 问题定位（基于 issue + 访问日志 + 代码链路）
+   - 关联 issue：`https://github.com/ZeroPointSix/outlookEmailPlus/issues/45`
+   - 现场日志确认 `POST /api/accounts/refresh/selected` 已到后端（HTTP 200），不是前端发起前拦截
+   - 定位到 `outlook_web/services/refresh.py` 的 selected 刷新链路在账号过滤阶段异常
+
+2. 根因
+   - selected 刷新过滤使用了 `row.get("provider")`
+   - 该分支 `row` 为 `sqlite3.Row`（`row_factory=sqlite3.Row`），不支持 `.get()`
+   - 导致 SSE 任务提前失败并回 `type=error`，前端侧仅见通用失败提示
+
+3. 代码修复
+   - 更新：`outlook_web/services/refresh.py`
+   - selected 查询补齐 `provider` 列
+   - `row.get("provider")` 改为 `row["provider"]`
+
+4. 回归测试
+   - 更新：`tests/test_refresh_outlook_only.py`
+   - 新增用例：`test_refresh_selected_mixed_accounts_streams_outlook_only_and_skips_imap`
+   - 覆盖点：混合账号（Outlook+IMAP）下 selected 刷新应只处理 Outlook，并完整返回 SSE `start/progress/complete`
+   - 执行结果：`python -m unittest tests.test_refresh_outlook_only.RefreshOutlookOnlyTests.test_refresh_selected_mixed_accounts_streams_outlook_only_and_skips_imap -v` -> `OK`
+
+5. 会话文档同步
+   - 新增 BUG 文档：`docs/BUG/2026-04-16-批量刷新Selected账号-SSE提前失败BUG.md`
+   - 已记录问题现象、证据链、根因、影响范围与修复建议
+
 #### 127. 文档同步提交已推送到 origin/main
 
 **时间**：2026-04-16
