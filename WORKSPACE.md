@@ -87,6 +87,34 @@
    - `v1.19.0` 发布日志已同步到 GitHub Release 页面
    - 两个发布产物已上传并完成 digest 校验
 
+#### 157. CI/CD 状态巡检（v1.19.0 发布后）
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 巡检范围
+   - 查询最近 20 条 Actions 运行：`gh run list --limit 20 ...`
+   - 聚焦 Docker 发布与 Release 工作流：
+     - `Build and Push Docker Image`
+     - `Create GitHub Release`
+
+2. 关键结论
+   - `Create GitHub Release`（tag `v1.19.0`，run `24551939289`）= `success`
+   - `Build and Push Docker Image`（tag `v1.19.0`，run `24551939307`）= `failure`
+     - 失败点：`quality-gate -> Run formatter checks`
+     - 结果：`build-and-push` job 被跳过
+   - `Build and Push Docker Image`（main，run `24551848819`）同样在 `quality-gate -> Run formatter checks` 失败
+   - `Code Quality`（main，run `24551848813`）失败点一致：`Run Black (Code Formatter Check)`
+   - 最新提交 `53b67ac` 对应 `SonarCloud Scan`（run `24552023774`）当前 `in_progress`
+
+3. 影响评估
+   - GitHub Release 页面与附件已成功发布，但 Docker 工作流未全绿。
+   - 当前阻塞主因为格式化门禁（Black/formatter）未通过。
+
+4. 文档同步
+   - 本条已回填 `WORKSPACE.md`
+
 #### 154. 人工验收结论回填：本轮本地 Docker 验收通过
 
 **时间**：2026-04-17
