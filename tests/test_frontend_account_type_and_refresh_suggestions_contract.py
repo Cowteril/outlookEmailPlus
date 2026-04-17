@@ -31,18 +31,14 @@ class FrontendAccountTypeContractTests(unittest.TestCase):
 
         self.assertIn("function isRefreshableOutlookAccount(accountLike)", main_js)
         self.assertIn("if (!isRefreshableOutlookAccount(a)) {", main_js)
-        self.assertIn(
-            "if (a.last_refresh_status === 'failed') expiredTokens++;", main_js
-        )
+        self.assertIn("if (a.last_refresh_status === 'failed') expiredTokens++;", main_js)
         self.assertIn("else validTokens++;", main_js)
 
     def test_group_cards_split_outlook_and_imap_status_rendering(self):
         client = self.app.test_client()
         groups_js = self._get_text(client, "/static/js/features/groups.js")
 
-        self.assertIn(
-            "const supportsTokenRefresh = isRefreshableOutlookAccount(acc);", groups_js
-        )
+        self.assertIn("const supportsTokenRefresh = isRefreshableOutlookAccount(acc);", groups_js)
         self.assertIn(
             "const isFailed = supportsTokenRefresh && acc.last_refresh_status === 'failed';",
             groups_js,
@@ -51,9 +47,7 @@ class FrontendAccountTypeContractTests(unittest.TestCase):
             "const defaultMethodLabel = supportsTokenRefresh ? 'Graph' : 'IMAP';",
             groups_js,
         )
-        self.assertIn(
-            'let tokenBadge = `<span class="badge badge-gray">IMAP</span>`;', groups_js
-        )
+        self.assertIn('let tokenBadge = `<span class="badge badge-gray">IMAP</span>`;', groups_js)
         self.assertIn("if (supportsTokenRefresh) {", groups_js)
         self.assertIn(
             '<span class="account-api-tag">${acc.method || defaultMethodLabel}</span>',
@@ -95,9 +89,7 @@ class FrontendAccountTypeContractTests(unittest.TestCase):
         self.assertIn("} else if (data.type === 'error') {", main_js)
         self.assertIn("const errCode = data.error && data.error.code;", main_js)
         self.assertIn("if (errCode === 'REFRESH_CONFLICT') {", main_js)
-        self.assertIn(
-            "showToast(userMessage, 'warning', data.error || null, true);", main_js
-        )
+        self.assertIn("showToast(userMessage, 'warning', data.error || null, true);", main_js)
 
     def test_retry_failed_conflict_branch_uses_warning_with_actionable_message(self):
         client = self.app.test_client()
@@ -111,9 +103,7 @@ class FrontendAccountTypeContractTests(unittest.TestCase):
         client = self.app.test_client()
         main_js = self._get_text(client, "/static/js/main.js")
 
-        self.assertIn(
-            "function buildRefreshAllPermissionErrorSummary(errorPayload)", main_js
-        )
+        self.assertIn("function buildRefreshAllPermissionErrorSummary(errorPayload)", main_js)
         self.assertIn("if (errCode === 'NO_MAIL_PERMISSION') {", main_js)
         self.assertIn("[Code] NO_MAIL_PERMISSION", main_js)
         self.assertIn("Mail.Read 或 Mail.ReadWrite", main_js)

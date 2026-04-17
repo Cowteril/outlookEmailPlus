@@ -115,6 +115,37 @@
 4. 文档同步
    - 本条已回填 `WORKSPACE.md`
 
+#### 158. CI 失败修复：按远端日志执行 Black 格式化并通过本地校验
+
+**时间**：2026-04-17
+
+**本次操作**：
+
+1. 读取失败日志定位根因
+   - 读取 run：`24551848813`（Code Quality）失败日志
+   - 失败点：`Run Black (Code Formatter Check)`
+   - 受影响文件（日志明确）：
+     - `outlook_web/services/refresh.py`
+     - `tests/test_refresh_outlook_only.py`
+     - `tests/test_refresh_selected_issue45.py`
+     - `tests/test_frontend_account_type_and_refresh_suggestions_contract.py`
+
+2. 执行修复
+   - 命令：
+     - `python -m black <上述4个文件>`
+   - 结果：4 个文件全部完成格式化。
+
+3. 本地门禁复核
+   - `python -m black --check outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` -> `All done`（通过）
+   - `python -m isort --check-only --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` -> 通过
+   - 定向回归：
+     - `python -m unittest tests.test_refresh_outlook_only tests.test_refresh_selected_issue45 tests.test_frontend_account_type_and_refresh_suggestions_contract -v`
+     - 结果：`Ran 20 tests in 5.536s`，`OK`
+
+4. 当前状态
+   - 本地已完成与 CI 失败点一致的 formatter 修复与回归验证。
+   - 下一步：提交并推送本次格式化修复，重新触发远端 CI/CD。
+
 #### 154. 人工验收结论回填：本轮本地 Docker 验收通过
 
 **时间**：2026-04-17

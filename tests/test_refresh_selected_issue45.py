@@ -39,9 +39,7 @@ class RefreshSelectedIssue45Tests(unittest.TestCase):
     def _default_group_id(self) -> int:
         conn = self.module.create_sqlite_connection()
         try:
-            row = conn.execute(
-                "SELECT id FROM groups WHERE name = '默认分组' LIMIT 1"
-            ).fetchone()
+            row = conn.execute("SELECT id FROM groups WHERE name = '默认分组' LIMIT 1").fetchone()
             return int(row["id"]) if row else 1
         finally:
             conn.close()
@@ -119,9 +117,7 @@ class RefreshSelectedIssue45Tests(unittest.TestCase):
     def _get_account_refresh_token(self, account_id: int) -> str:
         conn = self.module.create_sqlite_connection()
         try:
-            row = conn.execute(
-                "SELECT refresh_token FROM accounts WHERE id = ?", (account_id,)
-            ).fetchone()
+            row = conn.execute("SELECT refresh_token FROM accounts WHERE id = ?", (account_id,)).fetchone()
             return self.module.decrypt_data(row["refresh_token"])
         finally:
             conn.close()
@@ -190,20 +186,14 @@ class RefreshSelectedIssue45Tests(unittest.TestCase):
         self.assertEqual(refresh_calls[0][0], f"client_{unique}")
         self.assertEqual(refresh_calls[0][1], f"rt_{unique}")
 
-        self.assertEqual(
-            self._get_account_refresh_token(outlook_id), f"rt_new_{unique}"
-        )
+        self.assertEqual(self._get_account_refresh_token(outlook_id), f"rt_new_{unique}")
         self.assertEqual(self._get_account_refresh_token(imap_id), f"imap_rt_{unique}")
 
         self.assertEqual(
-            self._count_refresh_logs(
-                account_id=outlook_id, refresh_type="manual_selected"
-            ),
+            self._count_refresh_logs(account_id=outlook_id, refresh_type="manual_selected"),
             1,
         )
         self.assertEqual(
-            self._count_refresh_logs(
-                account_id=imap_id, refresh_type="manual_selected"
-            ),
+            self._count_refresh_logs(account_id=imap_id, refresh_type="manual_selected"),
             0,
         )
