@@ -8,6 +8,19 @@
 
 ### 操作记录
 
+#### 168. Handoff 文档 CN-00002 更新 & 会话收尾
+
+**时间**：2026-04-18
+
+**操作**：
+- 补全 `我们的文档/开放文档/CN/CN-00002-browser-extension-v2.0.0-release-and-branch-sync.md`
+  - 新增 Primary Intent 条目（README 重构 + 第二轮全分支同步）
+  - 更新 Current Work 状态表（所有分支对齐 `a82c61e`）
+  - 补充 Optional Next Step（浏览器扩展 4 个待决策点）
+- 全分支最终状态确认：main/dev/feature/Buggithubissue/alias-email-merge 均已对齐
+
+**结果**：本次会话所有任务完成，handoff 文档可用 `/pickup CN-00002` 继续。
+
 #### 167. README.md + README.en.md 版本亮点重构
 
 **时间**：2026-04-18
