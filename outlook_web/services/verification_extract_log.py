@@ -6,6 +6,7 @@ from outlook_web.db import get_db
 
 
 def encode_temp_mail_log_account_id(temp_mail_id: Any) -> Optional[int]:
+    # 用负数编码临时邮箱 ID，与 accounts 表正数 ID 区分，使 JOIN 条件可用 account_id > 0 / < 0 一刀切
     try:
         value = int(temp_mail_id or 0)
     except (TypeError, ValueError):
@@ -16,6 +17,7 @@ def encode_temp_mail_log_account_id(temp_mail_id: Any) -> Optional[int]:
 
 
 def resolve_extract_log_outcome(result: Optional[Dict[str, Any]]) -> Tuple[str, Optional[str]]:
+    # 优先级：code > link > none；result 可能是 None（异常路径），需防御
     payload = dict(result or {})
     code = str(payload.get("verification_code") or "").strip()
     if code:
@@ -83,4 +85,5 @@ def write_verification_extract_log(
         )
         conn.commit()
     except Exception:
+        # 日志写入失败不应阻断业务主链路（如邮件读取、验证码提取），因此静默吞掉
         pass

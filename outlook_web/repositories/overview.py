@@ -54,6 +54,7 @@ def _action_group(action: str) -> str:
 
 
 def get_overview_summary(conn: sqlite3.Connection | None = None) -> Dict[str, Any]:
+    # 概览大盘入口：聚合账号状态、邮箱池快照、刷新健康度、今日 KPI，供前端 dashboard 一次性加载
     db = _db(conn)
 
     account_rows = db.execute(
@@ -194,6 +195,7 @@ def get_verification_stats(
     days: int = 7,
     recent_limit: int = 10,
 ) -> Dict[str, Any]:
+    # 验证码提取统计：汇总成功率、渠道分布、AI 增强效果、P95 延迟，支持运营洞察
     db = _db(conn)
     cutoff = time.time() - max(int(days), 1) * 86400
 
@@ -250,6 +252,7 @@ def get_verification_stats(
         )
     channel_stats.sort(key=lambda item: (-int(item["count"]), item["channel"]))
 
+    # account_id > 0 对应 accounts 表，< 0 对应 temp_emails 表（取反编码，见 encode_temp_mail_log_account_id）
     recent_rows = db.execute(
         """
         SELECT vel.id, vel.started_at, vel.channel, vel.code_found, vel.duration_ms,
@@ -297,6 +300,7 @@ def get_verification_stats(
 
 
 def get_external_api_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> Dict[str, Any]:
+    # 外部 API 消费者统计：按调用方维度聚合调用量、成功率、端点分布，用于 API 用量监控
     db = _db(conn)
     days = max(int(days), 1)
     today = date.today()
@@ -423,6 +427,7 @@ def get_external_api_stats(conn: sqlite3.Connection | None = None, *, days: int 
 
 
 def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> Dict[str, Any]:
+    # 邮箱池统计：汇总可用/占用/冷却分布、操作统计、项目 Top5 使用率，帮助运营判断资源充足度
     db = _db(conn)
     cutoff_dt = (datetime.now(timezone.utc) - timedelta(days=max(int(days), 1))).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -568,6 +573,7 @@ def get_activity_stats(
     hours: int = 24,
     timeline_limit: int = 20,
 ) -> Dict[str, Any]:
+    # 活动时间线：合并审计日志 + 通知推送 + 验证码提取三种事件源，按时间倒序统一展示
     db = _db(conn)
     hours = max(int(hours), 1)
     audit_rows = db.execute(

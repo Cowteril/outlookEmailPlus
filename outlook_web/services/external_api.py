@@ -850,12 +850,14 @@ def _shape_verification_result_by_expected_field(extracted: Dict[str, Any], expe
 
 
 def _classify_extract_error(exc: Exception) -> str:
+    # 将异常分类为日志可读的 error_code：业务异常用语义 code，未知异常用类名大写
     if isinstance(exc, ExternalApiError):
         return str(exc.code or "INTERNAL_ERROR")
     return type(exc).__name__.upper()
 
 
 def _resolve_extract_log_channel(result: Optional[Dict[str, Any]], *, folder: str, method: str) -> str:
+    # 确定日志渠道标签：优先使用渠道路由内置标记，回退到 method/folder 推断
     if result and result.get("_log_channel"):
         return str(result.get("_log_channel") or "")
 
@@ -870,6 +872,7 @@ def _resolve_extract_log_channel(result: Optional[Dict[str, Any]], *, folder: st
 
 
 def _strip_extract_log_fields(result: Dict[str, Any]) -> Dict[str, Any]:
+    # 移除日志埋点专用的内部字段，避免泄露给 API 调用方
     clean = dict(result or {})
     clean.pop("_log_channel", None)
     clean.pop("_log_used_ai", None)
@@ -894,6 +897,7 @@ def _write_extract_log(
     error_code: Optional[str],
     trace_id: Optional[str],
 ) -> None:
+    # 二次异常隔离：write_verification_extract_log 内部已静默，这里再加一层防止 get_db() 抛出
     try:
         db = _get_db_for_log()
         write_verification_extract_log(
@@ -1052,6 +1056,7 @@ def get_verification_result(
         and verification_channel_service.is_outlook_oauth_account(account)
     ):
         try:
+            # Outlook 渠道路由路径：启用渠道记忆 + 多渠道路由编排（Graph → IMAP New → IMAP Old）
             result = _extract_verification_with_memory_for_outlook(
                 account=account,
                 email_addr=email_addr,
@@ -1070,6 +1075,7 @@ def get_verification_result(
             error_code = _classify_extract_error(exc)
             raise
         finally:
+            # finally 保证无论成功/失败都写入提取日志，用于大盘统计和渠道质量分析
             result_type, code_found = resolve_extract_log_outcome(result)
             _write_extract_log(
                 account_id=account_id,
@@ -1084,6 +1090,7 @@ def get_verification_result(
             )
 
     try:
+        # 通用提取路径：适用于非 Outlook OAuth 账号（IMAP 通用、临时邮箱等）或未启用渠道记忆时
         latest_summary = get_latest_message_for_external(
             email_addr=email_addr,
             folder=folder,
@@ -1143,6 +1150,7 @@ def get_verification_result(
         error_code = _classify_extract_error(exc)
         raise
     finally:
+        # 与 Outlook 路径相同：finally 保证日志落库
         result_type, code_found = resolve_extract_log_outcome(result)
         _write_extract_log(
             account_id=account_id,

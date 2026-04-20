@@ -588,10 +588,12 @@ class TempMailService:
         code_length: str | None = None,
         code_source: str = "all",
     ) -> dict[str, Any]:
+        # 临时邮箱验证码提取入口，结构与 external_api.get_verification_result 对齐，共享日志埋点
         started_at = time.time()
         mailbox = self._get_mailbox_descriptor(email_or_mailbox)
         record = dict(mailbox.get("record") or {})
         log_account_id = encode_temp_mail_log_account_id(record.get("id"))
+        # 负数编码临时邮箱 ID，使其与 accounts 正数 ID 共享 verification_extract_logs 表
         email_addr = str(mailbox.get("email") or "")
         extracted: dict[str, Any] | None = None
         error_code: str | None = None
@@ -655,6 +657,7 @@ class TempMailService:
             error_code = type(exc).__name__.upper()
             raise
         finally:
+            # finally 保证无论提取成功/失败都写入日志，与 external_api 路径保持一致的埋点策略
             result_type, code_found = resolve_extract_log_outcome(extracted)
             write_verification_extract_log(
                 account_id=log_account_id,

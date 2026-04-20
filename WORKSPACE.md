@@ -923,6 +923,30 @@
    - 不是新的功能/修复逻辑改动
    - 但它们依然会让 `main` 工作树处于“不干净”状态，因此按 `RELEASE.md` 口径，正式发版前仍需显式处理
 
+#### 200. 本地 main 工作树脏改动纳入管理 — 用户确认连同扩展 zip 一并纳入
+
+**时间**：2026-04-20
+
+**本次背景**：
+
+- 在复核出本地 `main` 工作树的 5 个 tracked 改动均为注释补充后，用户进一步明确：
+  - 不仅要把这些注释改动纳入管理
+  - `browser-extension.zip` 也要一起纳入版本管理
+
+**本次用户决策**：
+
+1. 允许将以下 5 个 tracked 文件的本地注释补充正式提交：
+   - `outlook_web/controllers/emails.py`
+   - `outlook_web/repositories/overview.py`
+   - `outlook_web/services/external_api.py`
+   - `outlook_web/services/temp_mail_service.py`
+   - `outlook_web/services/verification_extract_log.py`
+2. 允许将未跟踪文件 `browser-extension.zip` 一并纳入
+
+**当前状态**：
+
+- 下一步将基于这一用户授权，把上述文件连同本条记录一起正式提交到本地 `main`
+
 ---
 
 ## 2026-04-18

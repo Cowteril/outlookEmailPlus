@@ -598,6 +598,7 @@ def api_extract_verification(email_addr: str) -> Any:
             return decrypt_error_response
 
     try:
+        # 委托 external_api.get_verification_result 统一处理，复用日志埋点和渠道路由逻辑
         if account_type == "imap":
             external_api_service.get_emails_imap_generic = get_emails_imap_generic
             external_api_service.get_email_detail_imap_generic_result = get_email_detail_imap_generic_result
@@ -748,6 +749,8 @@ def _external_error_response(exc: external_api_service.ExternalApiError, *, allo
 
 
 def _should_return_email_not_found_for_web_extract(exc: external_api_service.ExternalApiError) -> bool:
+    # Web 端提取时：只有当所有渠道都是"无邮件"（非鉴权失败/非连接错误）才返回 EMAIL_NOT_FOUND
+    # 鉴权失败等错误需要透传原始 code，引导用户重新授权而非误报"无邮件"
     if not isinstance(exc, external_api_service.UpstreamReadFailedError):
         return False
 
