@@ -1057,6 +1057,48 @@
 - 文档已与 `v2.1.0` 的真实发布状态对齐：Release 成功、Python Tests 成功、Sonar 成功，但 Code Quality 与 Docker 发布链路失败。
 - 下一步如需让整个 CI/CD 真正转绿，需要处理 Black 格式化差异并重新触发相关工作流。
 
+#### 204. 本地修复 CI 门禁失败：格式化 + complexity + mypy 已全部转绿
+
+**时间**：2026-04-20
+
+**本次背景**：
+
+- 在确认 `v2.1.0` 的 GitHub Release 已成功、但 `Code Quality` 与 `Build and Push Docker Image` 因质量门禁失败后，继续在本地复现并修复这些失败项。
+
+**本次修复内容**：
+
+1. 格式化修复：
+   - 使用 `black` 修复 10 个文件的格式差异
+   - 使用 `isort --profile black` 修复 `outlook_web/services/temp_mail_service.py` 的 import 排序
+
+2. complexity 修复：
+   - `flake8 --max-complexity=10` 暴露 `outlook_web/services/external_api.py:get_verification_result` 复杂度为 `16`
+   - 通过拆分 helper（上下文准备、策略解析、AI 配置检查、日志收口、Outlook/通用提取执行器）收口主函数复杂度
+
+3. mypy 修复：
+   - 在 Outlook 渠道路由分支中补显式类型收窄，消除 `account Optional` 在 lambda 闭包内的类型报错
+
+**本地验证结果**：
+
+- 格式 / 静态门禁：
+  - `black --check outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` ✅
+  - `isort --check-only --profile black outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py` ✅
+  - `flake8 outlook_web tests web_outlook_app.py outlook_mail_reader.py start.py --count --select=E9,F63,F7,F82 --show-source --statistics` ✅
+  - `flake8 outlook_web/repositories/settings.py outlook_web/services/external_api.py outlook_web/controllers/system.py web_outlook_app.py --count --max-complexity=10 --max-line-length=127 --statistics` ✅
+  - `mypy --config-file pyproject.toml outlook_web/repositories/settings.py outlook_web/services/external_api.py outlook_web/controllers/system.py web_outlook_app.py` ✅
+  - `bandit -r outlook_web web_outlook_app.py outlook_mail_reader.py start.py -lll` ✅（无 High severity）
+
+- 测试：
+  - 定向回归：`tests.test_verification_extract_log tests.test_overview_api tests.test_overview_repository` ✅（`Ran 43 tests`）
+  - 全量回归：`python -m unittest discover -s tests -v` ✅
+
+**当前状态**：
+
+- 当前本地代码已经满足此前失败的 CI 门禁要求。
+- 但远端已公开的 `v2.1.0` tag / Release 仍指向修复前提交；下一步需要决定是：
+  - 发布补丁版本
+  - 还是重发/重跑现有发布链路
+
 ---
 
 ## 2026-04-18

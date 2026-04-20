@@ -56,6 +56,7 @@ class OverviewApiBaseTests(unittest.TestCase):
 
 # ===== A-01: GET /api/overview/summary =====
 
+
 class OverviewSummaryApiTests(OverviewApiBaseTests):
 
     _URL = "/api/overview/summary"
@@ -86,6 +87,7 @@ class OverviewSummaryApiTests(OverviewApiBaseTests):
 
 
 # ===== A-02: GET /api/overview/verification =====
+
 
 class OverviewVerificationApiTests(OverviewApiBaseTests):
 
@@ -125,6 +127,7 @@ class OverviewVerificationApiTests(OverviewApiBaseTests):
 
 # ===== A-03: GET /api/overview/external-api =====
 
+
 class OverviewExternalApiTests(OverviewApiBaseTests):
 
     _URL = "/api/overview/external-api"
@@ -155,6 +158,7 @@ class OverviewExternalApiTests(OverviewApiBaseTests):
 
 # ===== A-04: GET /api/overview/pool =====
 
+
 class OverviewPoolApiTests(OverviewApiBaseTests):
 
     _URL = "/api/overview/pool"
@@ -178,6 +182,7 @@ class OverviewPoolApiTests(OverviewApiBaseTests):
 
 
 # ===== A-05: GET /api/overview/activity =====
+
 
 class OverviewActivityApiTests(OverviewApiBaseTests):
 

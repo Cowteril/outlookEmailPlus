@@ -989,17 +989,12 @@ def init_db(database_path: Optional[str] = None):
         cursor.execute("PRAGMA table_info(external_api_consumer_usage_daily)")
         external_usage_columns = [col[1] for col in cursor.fetchall()]
         if "caller_id" not in external_usage_columns:
-            cursor.execute(
-                "ALTER TABLE external_api_consumer_usage_daily ADD COLUMN caller_id TEXT NOT NULL DEFAULT ''"
-            )
+            cursor.execute("ALTER TABLE external_api_consumer_usage_daily ADD COLUMN caller_id TEXT NOT NULL DEFAULT ''")
         if "date" not in external_usage_columns:
             cursor.execute("ALTER TABLE external_api_consumer_usage_daily ADD COLUMN date TEXT NOT NULL DEFAULT ''")
         if "call_count" not in external_usage_columns:
-            cursor.execute(
-                "ALTER TABLE external_api_consumer_usage_daily ADD COLUMN call_count INTEGER NOT NULL DEFAULT 0"
-            )
-        cursor.execute(
-            """
+            cursor.execute("ALTER TABLE external_api_consumer_usage_daily ADD COLUMN call_count INTEGER NOT NULL DEFAULT 0")
+        cursor.execute("""
             UPDATE external_api_consumer_usage_daily
             SET caller_id = COALESCE(NULLIF(caller_id, ''), consumer_name, consumer_key),
                 date = COALESCE(NULLIF(date, ''), usage_date),
@@ -1007,8 +1002,7 @@ def init_db(database_path: Optional[str] = None):
                     WHEN COALESCE(call_count, 0) <= 0 AND COALESCE(total_count, 0) > 0 THEN total_count
                     ELSE COALESCE(call_count, 0)
                 END
-            """
-        )
+            """)
 
         # v11: 邮箱池字段 + account_claim_logs 表（PRD-00009 MT-1）
         cursor.execute("PRAGMA table_info(accounts)")
@@ -1063,13 +1057,11 @@ def init_db(database_path: Optional[str] = None):
         account_claim_log_columns = [col[1] for col in cursor.fetchall()]
         if "claimed_at" not in account_claim_log_columns:
             cursor.execute("ALTER TABLE account_claim_logs ADD COLUMN claimed_at TEXT DEFAULT NULL")
-        cursor.execute(
-            """
+        cursor.execute("""
             UPDATE account_claim_logs
             SET claimed_at = COALESCE(claimed_at, created_at)
             WHERE claimed_at IS NULL
-            """
-        )
+            """)
 
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_cooldown_seconds', '86400')")
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pool_default_lease_seconds', '600')")

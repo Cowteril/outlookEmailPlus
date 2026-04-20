@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from outlook_web.repositories import temp_emails as temp_emails_repo
-from outlook_web.services.verification_extract_log import (
-    encode_temp_mail_log_account_id,
-    resolve_extract_log_outcome,
-    write_verification_extract_log,
-)
 from outlook_web.services.temp_mail_provider_custom import TempMailProviderReadError
 from outlook_web.services.temp_mail_provider_factory import (
     TempMailProviderFactoryError,
     get_temp_mail_provider,
+)
+from outlook_web.services.verification_extract_log import (
+    encode_temp_mail_log_account_id,
+    resolve_extract_log_outcome,
+    write_verification_extract_log,
 )
 from outlook_web.services.verification_extractor import (
     apply_confidence_gate,

@@ -34,12 +34,7 @@ class DbSchemaV23OverviewTests(unittest.TestCase):
             init_db(database_path=str(db_path))
             conn = sqlite3.connect(str(db_path))
             try:
-                tables = [
-                    row[0]
-                    for row in conn.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    ).fetchall()
-                ]
+                tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
                 self.assertIn("verification_extract_logs", tables)
             finally:
                 conn.close()
@@ -55,12 +50,7 @@ class DbSchemaV23OverviewTests(unittest.TestCase):
             init_db(database_path=str(db_path))
             conn = sqlite3.connect(str(db_path))
             try:
-                columns = {
-                    row[1]
-                    for row in conn.execute(
-                        "PRAGMA table_info(verification_extract_logs)"
-                    ).fetchall()
-                }
+                columns = {row[1] for row in conn.execute("PRAGMA table_info(verification_extract_logs)").fetchall()}
                 expected = {
                     "id",
                     "account_id",
@@ -114,12 +104,7 @@ class DbSchemaV23OverviewTests(unittest.TestCase):
             init_db(database_path=str(db_path))
             conn = sqlite3.connect(str(db_path))
             try:
-                tables = [
-                    row[0]
-                    for row in conn.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
-                    ).fetchall()
-                ]
+                tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
                 for must_exist in ("accounts", "audit_logs", "verification_extract_logs"):
                     self.assertIn(must_exist, tables, f"表 {must_exist} 升级后消失")
             finally:
@@ -160,9 +145,7 @@ class DbSchemaV23OverviewTests(unittest.TestCase):
                         (result_type,),
                     )
                 conn.commit()
-                count = conn.execute(
-                    "SELECT COUNT(*) FROM verification_extract_logs"
-                ).fetchone()[0]
+                count = conn.execute("SELECT COUNT(*) FROM verification_extract_logs").fetchone()[0]
                 self.assertEqual(count, 3)
             finally:
                 conn.close()

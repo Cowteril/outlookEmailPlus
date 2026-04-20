@@ -261,12 +261,10 @@ class OverviewActivityStatsRepositoryTests(OverviewRepositoryBaseTests):
             from outlook_web.repositories.overview import get_activity_stats
 
             db = get_db()
-            db.execute(
-                """
+            db.execute("""
                 INSERT INTO audit_logs (action, resource_type, operator, status, created_at)
                 VALUES ('ov_test_action', 'test', 'tester', 'ok', datetime('now'))
-                """
-            )
+                """)
             db.commit()
 
             result = get_activity_stats()

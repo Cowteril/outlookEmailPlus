@@ -460,9 +460,7 @@ def extract_verification_for_outlook(
             }
         )
         extracted["_log_channel"] = (
-            "ai_fallback"
-            if extracted.get("_used_ai") and _is_extraction_success(extracted, expected_field)
-            else channel
+            "ai_fallback" if extracted.get("_used_ai") and _is_extraction_success(extracted, expected_field) else channel
         )
         extracted["_log_used_ai"] = bool(extracted.get("_used_ai"))
         last_extracted = extracted

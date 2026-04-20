@@ -57,13 +57,11 @@ def get_overview_summary(conn: sqlite3.Connection | None = None) -> Dict[str, An
     # 概览大盘入口：聚合账号状态、邮箱池快照、刷新健康度、今日 KPI，供前端 dashboard 一次性加载
     db = _db(conn)
 
-    account_rows = db.execute(
-        """
+    account_rows = db.execute("""
         SELECT COALESCE(status, '') AS status, COUNT(*) AS cnt
         FROM accounts
         GROUP BY COALESCE(status, '')
-        """
-    ).fetchall()
+        """).fetchall()
     account_status = {
         "total": 0,
         "active": 0,
@@ -84,14 +82,12 @@ def get_overview_summary(conn: sqlite3.Connection | None = None) -> Dict[str, An
         elif status in {"error", "failed"}:
             account_status["error"] += count
 
-    pool_rows = db.execute(
-        """
+    pool_rows = db.execute("""
         SELECT COALESCE(pool_status, '') AS pool_status, COUNT(*) AS cnt
         FROM accounts
         WHERE pool_status IS NOT NULL
         GROUP BY COALESCE(pool_status, '')
-        """
-    ).fetchall()
+        """).fetchall()
     pool_snapshot = {
         "available": 0,
         "in_use": 0,
@@ -117,22 +113,18 @@ def get_overview_summary(conn: sqlite3.Connection | None = None) -> Dict[str, An
             pool_snapshot["disabled"] += count
     pool_snapshot["usage_rate"] = _safe_div(pool_snapshot["in_use"], pool_snapshot["total"])
 
-    refresh_last = db.execute(
-        """
+    refresh_last = db.execute("""
         SELECT started_at, finished_at, total, success_count, failed_count
         FROM refresh_runs
         ORDER BY started_at DESC, id DESC
         LIMIT 1
-        """
-    ).fetchone()
-    refresh_7d = db.execute(
-        """
+        """).fetchone()
+    refresh_7d = db.execute("""
         SELECT COALESCE(SUM(success_count), 0) AS success_sum,
                COALESCE(SUM(total), 0) AS total_sum
         FROM refresh_runs
         WHERE datetime(started_at) >= datetime('now', '-7 day')
-        """
-    ).fetchone()
+        """).fetchone()
 
     duration_seconds = 0
     if refresh_last and refresh_last["started_at"] and refresh_last["finished_at"]:
@@ -153,20 +145,16 @@ def get_overview_summary(conn: sqlite3.Connection | None = None) -> Dict[str, An
         """,
         (today_start,),
     ).fetchone()
-    today_messages = db.execute(
-        """
+    today_messages = db.execute("""
         SELECT COUNT(*) AS message_count
         FROM temp_email_messages
         WHERE datetime(created_at) >= datetime('now', 'start of day')
-        """
-    ).fetchone()
-    temp_mail_active = db.execute(
-        """
+        """).fetchone()
+    temp_mail_active = db.execute("""
         SELECT COUNT(*) AS active_count
         FROM temp_emails
         WHERE COALESCE(status, 'active') = 'active'
-        """
-    ).fetchone()
+        """).fetchone()
 
     return {
         "account_status": account_status,
@@ -307,8 +295,7 @@ def get_external_api_stats(conn: sqlite3.Connection | None = None, *, days: int 
     day_list = [(today - timedelta(days=offset)).isoformat() for offset in range(days - 1, -1, -1)]
     day_set = set(day_list)
 
-    rows = db.execute(
-        """
+    rows = db.execute("""
         SELECT consumer_key,
                consumer_name,
                caller_id,
@@ -320,8 +307,7 @@ def get_external_api_stats(conn: sqlite3.Connection | None = None, *, days: int 
                error_count,
                last_used_at
         FROM external_api_consumer_usage_daily
-        """
-    ).fetchall()
+        """).fetchall()
 
     filtered = []
     for row in rows:
@@ -437,14 +423,12 @@ def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> 
         "cooldown": 0,
         "used": 0,
     }
-    rows = db.execute(
-        """
+    rows = db.execute("""
         SELECT COALESCE(pool_status, '') AS pool_status, COUNT(*) AS cnt
         FROM accounts
         WHERE pool_status IS NOT NULL
         GROUP BY COALESCE(pool_status, '')
-        """
-    ).fetchall()
+        """).fetchall()
     for row in rows:
         status = str(row["pool_status"] or "").strip().lower()
         count = int(row["cnt"] or 0)
@@ -491,19 +475,16 @@ def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> 
         elif action == "expire":
             operation_distribution["expire"] += count
 
-    max_claimed = db.execute(
-        """
+    max_claimed = db.execute("""
         SELECT MAX(CAST((julianday('now') - julianday(claimed_at)) * 86400 AS INTEGER)) AS max_claim_s
         FROM accounts
         WHERE pool_status = 'claimed' AND claimed_at IS NOT NULL
-        """
-    ).fetchone()
+        """).fetchone()
     claim_count = operation_distribution["claim"]
     complete_count = operation_distribution["complete"]
     complete_success = operation_distribution["complete_success"]
 
-    top_project_rows = db.execute(
-        """
+    top_project_rows = db.execute("""
         SELECT project_key,
                COUNT(DISTINCT account_id) AS account_count,
                COALESCE(SUM(success_count), 0) AS success_count,
@@ -513,8 +494,7 @@ def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> 
         GROUP BY project_key
         ORDER BY success_count DESC, account_count DESC, project_key ASC
         LIMIT 5
-        """
-    ).fetchall()
+        """).fetchall()
     project_top5 = [
         {
             "project_key": row["project_key"] or "",
@@ -525,8 +505,7 @@ def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> 
         for row in top_project_rows
     ]
 
-    recent_rows = db.execute(
-        """
+    recent_rows = db.execute("""
         SELECT COALESCE(l.claimed_at, l.created_at) AS action_time,
                a.email AS account_email,
                l.action,
@@ -537,8 +516,7 @@ def get_pool_stats(conn: sqlite3.Connection | None = None, *, days: int = 7) -> 
         LEFT JOIN accounts AS a ON a.id = l.account_id
         ORDER BY action_time DESC, l.id DESC
         LIMIT 10
-        """
-    ).fetchall()
+        """).fetchall()
     recent_operations = [
         {
             "time": row["action_time"] or "",

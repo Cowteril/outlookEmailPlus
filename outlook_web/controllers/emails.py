@@ -36,6 +36,7 @@ _EXTERNAL_NESTED_UPSTREAM_CODES = {
     "IMAP_FOLDER_NOT_FOUND",
 }
 
+
 def _build_response_from_error_payload(error_payload: dict[str, Any]):
     return build_error_response(
         str(error_payload.get("code") or "INTERNAL_ERROR"),

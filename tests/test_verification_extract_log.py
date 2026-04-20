@@ -150,9 +150,7 @@ class VerificationExtractLogWriteTests(unittest.TestCase):
             )
 
             db = get_db()
-            row = db.execute(
-                "SELECT duration_ms FROM verification_extract_logs ORDER BY id DESC LIMIT 1"
-            ).fetchone()
+            row = db.execute("SELECT duration_ms FROM verification_extract_logs ORDER BY id DESC LIMIT 1").fetchone()
             self.assertIsNotNone(row)
             self.assertEqual(row[0], 2345)
 
@@ -177,9 +175,7 @@ class VerificationExtractLogWriteTests(unittest.TestCase):
             )
 
             db = get_db()
-            row = db.execute(
-                "SELECT channel, used_ai FROM verification_extract_logs ORDER BY id DESC LIMIT 1"
-            ).fetchone()
+            row = db.execute("SELECT channel, used_ai FROM verification_extract_logs ORDER BY id DESC LIMIT 1").fetchone()
             self.assertIsNotNone(row)
             self.assertEqual(row[0], "ai_fallback")
             self.assertEqual(row[1], 1)
