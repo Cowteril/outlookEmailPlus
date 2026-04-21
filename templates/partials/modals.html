@@ -7235,8 +7235,8 @@
                 <div class="form-group">
                     <label class="form-label">当前 OAuth 应用配置</label>
                     <div class="action-grid" style="grid-template-columns: 1fr; gap: 0.5rem;">
-                        <input type="text" class="form-input" id="oauthClientIdInput" readonly style="font-family: var(--font-mono); font-size: 12px;">
-                        <input type="text" class="form-input" id="oauthRedirectUriInput" readonly style="font-family: var(--font-mono); font-size: 12px;">
+                        <input type="text" class="form-input readonly-field copy-on-click" id="oauthClientIdInput" readonly style="font-family: var(--font-mono); font-size: 12px;" title="点击复制">
+                        <input type="text" class="form-input readonly-field copy-on-click" id="oauthRedirectUriInput" readonly style="font-family: var(--font-mono); font-size: 12px;" title="点击复制">
                     </div>
 
     <!-- 危险邮件预警模态框 -->
@@ -7355,8 +7355,7 @@
                 <div class="form-group">
                     <label class="form-label">步骤 1: 访问授权链接</label>
                     <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
-                        <input type="text" class="form-input" id="authUrlInput" readonly style="flex: 1; font-size: 12px; font-family: var(--font-mono);">
-                        <button class="btn btn-secondary" onclick="copyAuthUrl()" style="white-space: nowrap;">复制</button>
+                        <input type="text" class="form-input readonly-field copy-on-click" id="authUrlInput" readonly style="flex: 1; font-size: 12px; font-family: var(--font-mono);" title="点击复制">
                         <button class="btn btn-primary" onclick="openAuthUrl()" style="white-space: nowrap;">打开</button>
                     </div>
 
@@ -7537,8 +7536,8 @@
 
                 <div class="form-group" id="refreshTokenResult" style="display: none;">
                     <label class="form-label">✅ 账号信息（已获取成功）</label>
-                    <textarea class="form-textarea" id="refreshTokenOutput" readonly
-                        style="height: 100px; font-size: 12px; font-family: var(--font-mono); background-color: rgba(31,111,235,0.06); border-color: rgba(31,111,235,0.35);"></textarea>
+                    <textarea class="form-textarea readonly-field copy-on-click" id="refreshTokenOutput" readonly
+                        style="height: 100px; font-size: 12px; font-family: var(--font-mono); background-color: rgba(31,111,235,0.06); border-color: rgba(31,111,235,0.35);" title="点击复制"></textarea>
                     <div class="form-hint" style="color: var(--clr-accent);">
                         <strong>格式说明：</strong>邮箱----密码----client_id----refresh_token<br>
                         请将"your@outlook.com"和"yourpassword"替换为您的实际邮箱和密码，然后复制整行内容到"导入邮箱"中使用

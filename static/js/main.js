@@ -945,6 +945,40 @@
             return retryRequest.execute();
         };
 
+        function bindCopyOnClickFields() {
+            document.addEventListener('click', async function (event) {
+                const target = event.target;
+                if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+                    return;
+                }
+                if (!target.classList.contains('copy-on-click')) {
+                    return;
+                }
+
+                const value = (target.value || '').trim();
+                if (!value) {
+                    showToast(translateAppTextLocal('没有可复制的内容'), 'warn');
+                    return;
+                }
+
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                        await navigator.clipboard.writeText(value);
+                    } else {
+                        target.select();
+                        document.execCommand('copy');
+                    }
+
+                    target.classList.remove('copy-flash-success');
+                    void target.offsetWidth;
+                    target.classList.add('copy-flash-success');
+                    showToast(translateAppTextLocal('已复制到剪贴板'), 'success');
+                } catch (error) {
+                    showToast(translateAppTextLocal('复制失败，请手动复制'), 'error');
+                }
+            });
+        }
+
         // 初始化
         document.addEventListener('DOMContentLoaded', async function () {
             // 应用保存的主题
@@ -967,6 +1001,7 @@
             initColorPicker();
             initEmailListScroll();
             initResizeHandles();
+            bindCopyOnClickFields();
 
             // 初始化轮询设置
             initPollingSettings();

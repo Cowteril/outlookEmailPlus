@@ -4227,6 +4227,35 @@ tr:hover td {
   color: var(--text-muted);
 }
 
+/* 点击复制字段样式 */
+.copy-on-click {
+  cursor: pointer !important;
+  user-select: all;
+}
+
+.copy-on-click:hover {
+  border-color: var(--clr-primary) !important;
+  box-shadow: 0 0 0 2px rgba(15, 108, 189, 0.1);
+}
+
+/* 复制成功闪绿效果 */
+.copy-flash-success {
+  animation: copy-success-flash 0.6s ease-out;
+}
+
+@keyframes copy-success-flash {
+  0% {
+    background-color: rgba(6, 118, 71, 1);
+    border-color: var(--clr-success) !important;
+    box-shadow: 0 0 0 4px rgba(6, 118, 71, 1);
+  }
+  100% {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-light);
+    box-shadow: none;
+  }
+}
+
 /* Tab 自动保存状态圆点指示器 */
 .tab-save-dot {
   display: none;
